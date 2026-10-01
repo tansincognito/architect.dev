@@ -2,7 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell, GlobalLayer } from "./components/Shell";
 import { useStore } from "./lib/store";
 import Landing from "./pages/Landing";
-import { Onboarding, SignIn, Verify } from "./pages/Auth";
+import { Onboarding, SignIn } from "./pages/Auth";
 import Home from "./pages/Home";
 import NewBuild from "./pages/NewBuild";
 import Import from "./pages/Import";
@@ -25,14 +25,20 @@ import ObserveTab from "./pages/workspace/ObserveTab";
 import EvalsTab from "./pages/workspace/EvalsTab";
 import SettingsTab from "./pages/workspace/SettingsTab";
 
+function Splash() {
+  return <div className="min-h-screen flex items-center justify-center font-mono text-[0.7rem] text-dim">loading…</div>;
+}
+
 function RequireUser({ children }: { children: React.ReactNode }) {
-  const { user } = useStore();
+  const { user, authLoading } = useStore();
+  if (authLoading) return <Splash />;
   return user ? <>{children}</> : <Navigate to="/signin" replace />;
 }
 
 /** Signed-in users land straight in the app (sidebar + home); visitors see the marketing page. */
 function RootRoute() {
-  const { user } = useStore();
+  const { user, authLoading } = useStore();
+  if (authLoading) return <Splash />;
   return user ? <Navigate to="/app" replace /> : <Landing />;
 }
 
@@ -42,7 +48,6 @@ export default function App() {
       <Routes>
         <Route path="/" element={<RootRoute />} />
         <Route path="/signin" element={<SignIn />} />
-        <Route path="/verify" element={<Verify />} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route
           path="/app"

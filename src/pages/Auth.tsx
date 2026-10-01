@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Check, Code2, Sparkles, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { Check, Code2, Sparkles, Users } from "lucide-react";
 import { Logo } from "../components/Shell";
-import { Btn, Field, GithubMark, GoogleMark, Input, Label, Pills, Spinner, cx } from "../components/ui";
+import { Btn, Field, GithubMark, Input, Label, Pills, Spinner, cx } from "../components/ui";
 import { useStore, type Mode } from "../lib/store";
+import { api, ApiError } from "../lib/api";
 
 function AuthFrame({ children, aside }: { children: React.ReactNode; aside?: React.ReactNode }) {
   const nav = useNavigate();
@@ -62,154 +63,63 @@ function TerminalAside() {
 export function SignIn() {
   const nav = useNavigate();
   const [params] = useSearchParams();
-  const [tab, setTab] = useState<"sign in" | "sign up">(params.get("mode") === "signup" ? "sign up" : "sign in");
-  const [email, setEmail] = useState("");
-  const [loading, setLoading] = useState<string | null>(null);
   const { signIn } = useStore();
+  const [tab, setTab] = useState<"sign in" | "sign up">(params.get("mode") === "signup" ? "sign up" : "sign in");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const oauth = (provider: string) => {
-    setLoading(provider);
-    setTimeout(() => {
-      if (tab === "sign in") {
-        signIn({ name: "Ajay", email: "ajay@acme.dev", workspace: "acme" });
-        nav("/app");
-      } else {
-        sessionStorage.setItem("arch.email", provider === "github" ? "ajay@users.github.com" : "ajay@gmail.com");
-        sessionStorage.setItem("arch.viaGithub", provider === "github" ? "1" : "");
-        nav("/onboarding");
-      }
-    }, 900);
+  const signingUp = tab === "sign up";
+  const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && password.length >= (signingUp ? 8 : 1) && (!signingUp || name.trim().length > 0);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!valid || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { user } = signingUp ? await api.signup({ name: name.trim(), email, password }) : await api.login({ email, password });
+      signIn(user);
+      nav(signingUp ? "/onboarding" : "/app");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not reach the server. Is the API running?");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <AuthFrame aside={<TerminalAside />}>
-      <h1 className="font-sans text-[1.6rem] font-semibold tracking-[-0.02em] m-0">{tab === "sign in" ? "Sign in to Architect" : "Create your organisation's workspace"}</h1>
-      <p className="text-[0.82rem] text-muted mt-1.5 mb-6">
-        {tab === "sign in" ? "Sign in with Google, GitHub or your work email." : "$10 of free credits · no payment details required"}
-      </p>
+      <h1 className="font-sans text-[1.6rem] font-semibold tracking-[-0.02em] m-0">{signingUp ? "Create your account" : "Sign in to Architect"}</h1>
+      <p className="text-[0.82rem] text-muted mt-1.5 mb-6">{signingUp ? "$10 of free credits · no payment details required" : "Use the email and password you registered with."}</p>
 
-      <Pills items={["sign in", "sign up"] as const} value={tab} onChange={setTab} className="mb-5" />
+      <Pills items={["sign in", "sign up"] as const} value={tab} onChange={(t) => (setTab(t), setError(null))} className="mb-5" />
 
-      <div className="space-y-2">
-        <Btn variant="dark" size="lg" className="w-full" onClick={() => oauth("github")} disabled={!!loading}>
-          {loading === "github" ? <Spinner /> : <GithubMark />} Continue with GitHub
-          <span className="ml-auto text-[0.68rem] text-neon/80 font-normal">for engineering teams</span>
-        </Btn>
-        <Btn variant="secondary" size="lg" className="w-full" onClick={() => oauth("google")} disabled={!!loading}>
-          {loading === "google" ? <Spinner /> : <GoogleMark />} Continue with Google Workspace
-        </Btn>
-      </div>
-
-      <div className="flex items-center gap-3 my-5">
-        <div className="h-px bg-line flex-1" />
-        <span className="font-mono text-[0.55rem] text-dim uppercase tracking-[0.1em]">or work email</span>
-        <div className="h-px bg-line flex-1" />
-      </div>
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!email.includes("@")) return;
-          sessionStorage.setItem("arch.email", email);
-          sessionStorage.setItem("arch.flow", tab);
-          nav("/verify");
-        }}
-        className="space-y-3"
-      >
+      <form onSubmit={submit} className="space-y-3">
+        {signingUp && (
+          <Field label="full name">
+            <Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" autoFocus />
+          </Field>
+        )}
         <Field label="work email address">
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" autoFocus />
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" autoComplete="email" autoFocus={!signingUp} />
         </Field>
-        <Btn variant="secondary" size="lg" className="w-full" disabled={!email.includes("@")}>
-          Send verification code
+        <Field label="password" hint={signingUp ? "At least 8 characters." : undefined}>
+          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={signingUp ? "new-password" : "current-password"} />
+        </Field>
+        {error && <div className="text-[0.8rem] text-danger rise">{error}</div>}
+        <Btn variant="primary" size="lg" className="w-full" disabled={!valid || busy}>
+          {busy && <Spinner />} {signingUp ? "Create account" : "Sign in"}
         </Btn>
       </form>
 
       <div className="flex justify-between mt-6 text-[0.75rem] text-dim">
-        <button className="hover:text-fg cursor-pointer inline-flex items-center gap-1" onClick={() => setLoading(null)}>
-          Need help signing in?
+        <button onClick={() => (setTab(signingUp ? "sign in" : "sign up"), setError(null))} className="hover:text-fg cursor-pointer">
+          {signingUp ? "Already have an account? Sign in" : "New to Architect? Create an account"}
         </button>
-        <span>Terms · Privacy · DPA</span>
-      </div>
-    </AuthFrame>
-  );
-}
-
-export function Verify() {
-  const nav = useNavigate();
-  const { signIn } = useStore();
-  const email = sessionStorage.getItem("arch.email") ?? "you@company.com";
-  const flow = sessionStorage.getItem("arch.flow") ?? "sign up";
-  const [code, setCode] = useState(["", "", "", "", "", ""]);
-  const [checking, setChecking] = useState(false);
-  const refs = useRef<(HTMLInputElement | null)[]>([]);
-
-  const full = code.every((c) => c);
-
-  useEffect(() => {
-    if (!full) return;
-    setChecking(true);
-    const t = setTimeout(() => {
-      if (flow === "sign in") {
-        signIn({ name: email.split("@")[0], email, workspace: "acme" });
-        nav("/app");
-      } else nav("/onboarding");
-    }, 800);
-    return () => clearTimeout(t);
-  }, [full, flow, email, nav, signIn]);
-
-  return (
-    <AuthFrame aside={<TerminalAside />}>
-      <button onClick={() => nav("/signin")} className="text-[0.78rem] text-dim hover:text-fg inline-flex items-center gap-1 mb-6 cursor-pointer">
-        <ArrowLeft size={10} /> Back
-      </button>
-      <h1 className="font-sans text-[1.6rem] font-semibold tracking-[-0.02em] m-0">Verify your email</h1>
-      <p className="text-[0.82rem] text-muted mt-1.5 mb-7">
-        Enter the 6-digit code sent to <span className="text-fg">{email}</span>
-      </p>
-      <div className="flex gap-2">
-        {code.map((c, i) => (
-          <input
-            key={i}
-            ref={(el) => {
-              refs.current[i] = el;
-            }}
-            value={c}
-            autoFocus={i === 0}
-            inputMode="numeric"
-            maxLength={1}
-            onChange={(e) => {
-              const v = e.target.value.replace(/\D/g, "");
-              setCode((arr) => arr.map((x, j) => (j === i ? v : x)));
-              if (v && i < 5) refs.current[i + 1]?.focus();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Backspace" && !c && i > 0) refs.current[i - 1]?.focus();
-            }}
-            onPaste={(e) => {
-              const digits = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6).split("");
-              if (digits.length === 6) {
-                e.preventDefault();
-                setCode(digits);
-              }
-            }}
-            className="w-12 h-14 text-center font-mono text-[1.3rem] font-bold bg-surface border border-line-2 rounded-lg outline-none focus:border-fg focus:bg-bg"
-          />
-        ))}
-      </div>
-      <div className="mt-5 flex items-center justify-between">
-        <button
-          onClick={() => setCode(["4", "8", "1", "2", "0", "7"])}
-          className="font-mono text-[0.6rem] text-neon-ink bg-neon-soft border border-neon-line rounded px-2 py-1 cursor-pointer"
-        >
-          Demo: autofill code
-        </button>
-        {checking ? (
-          <span className="text-[0.78rem] text-muted inline-flex items-center gap-2">
-            <Spinner /> Verifying
-          </span>
-        ) : (
-          <button className="text-[0.75rem] text-dim hover:text-fg cursor-pointer">Resend code in 30s</button>
-        )}
+        <span>Terms · Privacy</span>
       </div>
     </AuthFrame>
   );
@@ -226,20 +136,25 @@ const GOALS = [
 
 export function Onboarding() {
   const nav = useNavigate();
-  const { signIn, setMode } = useStore();
-  const email = sessionStorage.getItem("arch.email") ?? "you@company.com";
-  const viaGithub = !!sessionStorage.getItem("arch.viaGithub");
+  const { user, authLoading, signIn, setMode, toast } = useStore();
   const [step, setStep] = useState(0);
-  const [name, setName] = useState(email.split("@")[0]);
+  const [name, setName] = useState(user?.name ?? "");
   const [workspace, setWorkspace] = useState("acme");
   const [role, setRole] = useState<Mode | null>(null);
   const [goals, setGoals] = useState<string[]>([]);
-  const [gh, setGh] = useState<"idle" | "connecting" | "done">(viaGithub ? "done" : "idle");
+  const [gh, setGh] = useState<"idle" | "connecting" | "done">("idle");
 
   const steps = ["Profile", "Your role", "Priorities", "Source control", "Team"];
 
-  const finish = () => {
-    signIn({ name, email, workspace });
+  if (!authLoading && !user) return <Navigate to="/signin?mode=signup" replace />;
+
+  const finish = async () => {
+    try {
+      const { user: updated } = await api.updateMe({ name, workspace });
+      signIn(updated);
+    } catch {
+      toast("Could not save your profile; you can update it later in Account settings");
+    }
     setMode(role ?? "simple");
     nav(goals.includes("Modernise an existing application") ? "/app/import" : "/app");
   };

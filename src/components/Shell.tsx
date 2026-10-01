@@ -296,7 +296,7 @@ function AccountButton({ collapsed }: { collapsed: boolean }) {
             </button>
           ))}
           <div className="border-t border-line mt-1 pt-1">
-            <button className={item} onClick={() => (signOut(), nav("/"))}>
+            <button className={item} onClick={() => signOut().then(() => nav("/signin"))}>
               <LogOut size={12} /> Sign out
             </button>
           </div>

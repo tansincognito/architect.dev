@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { PROJECTS, SHARED_PROJECTS, type Project } from "./data";
+import { api } from "./api";
 
 export type Mode = "simple" | "dev";
 export type Theme = "light" | "dark";
@@ -27,8 +28,10 @@ export interface Toast {
 
 interface Store {
   user: User | null;
+  /** True until the session check against /api/auth/me completes. */
+  authLoading: boolean;
   signIn: (u: User) => void;
-  signOut: () => void;
+  signOut: () => Promise<void>;
   mode: Mode;
   setMode: (m: Mode) => void;
   theme: Theme;
@@ -81,7 +84,16 @@ const INITIAL_NOTICES: Notice[] = [
 ];
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => load("user", null));
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    api
+      .me()
+      .then(({ user }) => setUser(user))
+      .catch(() => setUser(null))
+      .finally(() => setAuthLoading(false));
+  }, []);
   const [mode, setModeState] = useState<Mode>(() => load("mode", "simple"));
   const [theme, setThemeState] = useState<Theme>(() => load("theme", "light"));
   const [credits, setCredits] = useState(840);
@@ -108,13 +120,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<Store>(
     () => ({
       user,
-      signIn: (u) => {
-        setUser(u);
-        save("user", u);
-      },
-      signOut: () => {
+      authLoading,
+      signIn: setUser,
+      signOut: async () => {
+        await api.logout().catch(() => undefined);
         setUser(null);
-        save("user", null);
       },
       mode,
       setMode: (m) => {
@@ -152,7 +162,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       helpOpen,
       setHelpOpen,
     }),
-    [user, mode, theme, credits, projects, notices, paletteOpen, toasts, toast, shared, setShared, org, sidebarPinned, helpOpen],
+    [user, authLoading, mode, theme, credits, projects, notices, paletteOpen, toasts, toast, shared, setShared, org, sidebarPinned, helpOpen],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

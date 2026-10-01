@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Copy, Download, Plus } from "lucide-react";
 import { Badge, Bar, Btn, Field, H1, HairGrid, Input, Label, Modal, Pills, Toggle, cx } from "../components/ui";
 import { useStore } from "../lib/store";
+import { api, ApiError } from "../lib/api";
 
 /* ---------------- credits ---------------- */
 
@@ -327,7 +328,11 @@ export function Team() {
 
 export function Settings() {
   const [params] = useSearchParams();
-  const { user, mode, setMode, theme, setTheme, toast } = useStore();
+  const { user, signIn, mode, setMode, theme, setTheme, toast } = useStore();
+  const [profileName, setProfileName] = useState(user?.name ?? "");
+  const [pw, setPw] = useState({ current: "", next: "" });
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [saving, setSaving] = useState<"profile" | "password" | null>(null);
   const [tab, setTab] = useState<"profile" | "api" | "notifications">(params.get("tab") === "api" ? "api" : "profile");
   const [keys, setKeys] = useState([{ name: "ci-deploy", created: "2026-08-02", last: "1h ago", scope: "deploy" }]);
   const [newKey, setNewKey] = useState<string | null>(null);
@@ -342,7 +347,7 @@ export function Settings() {
         <div className="space-y-4 rise">
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="full name">
-              <Input defaultValue={user?.name} />
+              <Input value={profileName} onChange={(e) => setProfileName(e.target.value)} />
             </Field>
             <Field label="email">
               <Input defaultValue={user?.email} disabled />
@@ -362,9 +367,55 @@ export function Settings() {
             </div>
             <Pills items={["light", "dark"] as const} value={theme} onChange={setTheme} />
           </div>
-          <Btn variant="primary" onClick={() => toast("Profile saved")}>
+          <Btn
+            variant="primary"
+            disabled={!profileName.trim() || saving === "profile"}
+            onClick={async () => {
+              setSaving("profile");
+              try {
+                const { user: updated } = await api.updateMe({ name: profileName.trim() });
+                signIn(updated);
+                toast("Profile saved");
+              } catch (err) {
+                toast(err instanceof ApiError ? err.message : "Could not save profile");
+              } finally {
+                setSaving(null);
+              }
+            }}
+          >
             Save
           </Btn>
+          <form
+            className="border border-line rounded-lg p-4 space-y-3"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setSaving("password");
+              setPwError(null);
+              try {
+                await api.changePassword(pw);
+                setPw({ current: "", next: "" });
+                toast("Password changed · other sessions signed out");
+              } catch (err) {
+                setPwError(err instanceof ApiError ? err.message : "Could not change password");
+              } finally {
+                setSaving(null);
+              }
+            }}
+          >
+            <div className="text-[0.88rem] font-semibold">Change password</div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Field label="current password">
+                <Input type="password" autoComplete="current-password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} />
+              </Field>
+              <Field label="new password" hint="At least 8 characters.">
+                <Input type="password" autoComplete="new-password" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} />
+              </Field>
+            </div>
+            {pwError && <div className="text-[0.8rem] text-danger">{pwError}</div>}
+            <Btn type="submit" disabled={!pw.current || pw.next.length < 8 || saving === "password"}>
+              Update password
+            </Btn>
+          </form>
         </div>
       )}
 
