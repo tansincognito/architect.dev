@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  --bg: #ffffff;
+  --surface: #f5f5f5;
+  --surface-2: #ebebeb;
+  --line: #e0e0e0;
+  --line-2: #cccccc;
+  --fg: #0a0a0a;
+  --muted: #666666;
+  --dim: #aaaaaa;
+  --neon: #b8f000;
+  --neon-ink: #3a5a00;
+  --neon-soft: #e8f8b0;
+  --neon-line: #c0e060;
+  --ink: #0e0e0e;
+  --ink-line: #1e1e1e;
+  --live: #5dba00;
+  --warn: #d97706;
+  --danger: #dc2626;
+  --info: #2563eb;
+}
+
+[data-theme="dark"] {
+  --bg: #0a0a0a;
+  --surface: #121212;
+  --surface-2: #1b1b1b;
+  --line: #222222;
+  --line-2: #333333;
+  --fg: #f0f0f0;
+  --muted: #9a9a9a;
+  --dim: #5a5a5a;
+  --neon-ink: #b8f000;
+  --neon-soft: rgba(184, 240, 0, 0.08);
+  --neon-line: rgba(184, 240, 0, 0.3);
+  --ink: #050505;
+  --ink-line: #1e1e1e;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-dim: var(--dim);
+  --color-neon: var(--neon);
+  --color-neon-ink: var(--neon-ink);
+  --color-neon-soft: var(--neon-soft);
+  --color-neon-line: var(--neon-line);
+  --color-ink: var(--ink);
+  --color-ink-line: var(--ink-line);
+  --color-live: var(--live);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; }
+
+::selection { background: #b8f000; color: #0a0a0a; }
+
+@keyframes blink { 50% { opacity: 0; } }
+.caret::after { content: "▋"; margin-left: 2px; color: var(--neon); animation: blink 1s steps(1) infinite; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.rise { animation: rise 0.25s ease both; }
+
+@keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.pulse-dot { animation: pulse-dot 1.2s ease-in-out infinite; }
+
+@keyframes shimmer { from { background-position: -200px 0; } to { background-position: 200px 0; } }
+.shimmer {
+  background: linear-gradient(90deg, var(--surface) 0%, var(--surface-2) 50%, var(--surface) 100%);
+  background-size: 400px 100%;
+  animation: shimmer 1.2s linear infinite;
+}
