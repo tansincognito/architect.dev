@@ -9,11 +9,11 @@ import { useStore } from "../lib/store";
 
 const AGENTS = [
   { name: "classifier", project: "support-triage-agent", fw: "LangGraph", model: "haiku-4.5", runs: "12.4k", status: "live" },
-  { name: "responder", project: "support-triage-agent", fw: "LangGraph", model: "sonnet-4.5", runs: "9.2k", status: "live" },
+  { name: "responder", project: "support-triage-agent", fw: "LangGraph", model: "sonnet-5", runs: "9.2k", status: "live" },
   { name: "escalator", project: "support-triage-agent", fw: "LangGraph", model: "policy", runs: "318", status: "live" },
-  { name: "researcher", project: "research-assistant", fw: "CrewAI", model: "sonnet-4.5", runs: "640", status: "building" },
-  { name: "analyst", project: "research-assistant", fw: "CrewAI", model: "opus-4.5", runs: "640", status: "building" },
-  { name: "extractor", project: "invoice-extractor", fw: "Vercel AI SDK", model: "sonnet-4.5", runs: "2.1k", status: "failed" },
+  { name: "researcher", project: "research-assistant", fw: "CrewAI", model: "sonnet-5", runs: "640", status: "building" },
+  { name: "analyst", project: "research-assistant", fw: "CrewAI", model: "opus-5.5", runs: "640", status: "building" },
+  { name: "extractor", project: "invoice-extractor", fw: "Vercel AI SDK", model: "sonnet-5", runs: "2.1k", status: "failed" },
 ];
 
 export function AgentsList() {
@@ -97,7 +97,7 @@ async for msg in query(prompt=request, options=options): ...`,
   "ai-sdk": `import { Agent, tool } from "ai";
 
 export const opsAgent = new Agent({
-  model: "anthropic/claude-sonnet-4.5",
+  model: "anthropic/claude-sonnet-5",
   tools: { lookup, update: tool({ needsApproval: true, ... }) },
   stopWhen: stepCountIs(6),
 });`,
@@ -141,7 +141,7 @@ export function AgentBuilder() {
     if (step === 2 && !nodes.length)
       setNodes([
         { id: "t", kind: "trigger", label: "New application", sub: TRIGGERS.find((t) => t.id === trigger)?.label ?? "", x: 20, y: 120 },
-        { id: "a1", kind: "agent", label: "Verifier", sub: "sonnet-4.5", x: 195, y: 120 },
+        { id: "a1", kind: "agent", label: "Verifier", sub: "sonnet-5", x: 195, y: 120 },
         { id: "tool1", kind: "tool", label: "Tax ID lookup", sub: "Government registry API", x: 195, y: 260 },
         { id: "a2", kind: "agent", label: "Risk scorer", sub: "haiku-4.5", x: 370, y: 120 },
         { id: "h", kind: "human", label: "Procurement approval", sub: "#procurement · 24h SLA", x: 370, y: 260 },

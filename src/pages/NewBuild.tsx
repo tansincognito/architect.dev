@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Bot, Check, Database, FileCode2, Globe, Info, LayoutTemplate, Plug, Wrench, X } from "lucide-react";
 import { AppPreview } from "../components/AppPreview";
 import { Badge, Bar, Btn, Label, Spinner, cx } from "../components/ui";
-import { BUILD_STEPS, CLARIFY_QUESTIONS, PLAN, type PlanItem } from "../lib/data";
+import type { PlanItem } from "../lib/data";
+import { SCENARIOS, SCENARIO_LIST, matchScenario, planFor, policyFor, questionsFor, stepsFor, type ScenarioId } from "../lib/scenarios";
 import { useStore } from "../lib/store";
 import type { PromptSubmit } from "../components/PromptBox";
 
@@ -31,14 +32,19 @@ export default function NewBuild() {
 
   const [stage, setStage] = useState<Stage>("thinking");
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [plan, setPlan] = useState<PlanItem[]>(PLAN);
+  const detected = useMemo(() => matchScenario(prompt), [prompt]);
+  const [scenarioId, setScenarioId] = useState<ScenarioId>(detected.scenario.id);
+  const scenario = SCENARIOS[scenarioId];
+  const questions = questionsFor(scenario);
+  const [plan, setPlan] = useState<PlanItem[]>([]);
+  const steps = useMemo(() => stepsFor(scenario, answers), [scenario, answers]);
   const [refine, setRefine] = useState("");
   const [step, setStep] = useState(0);
   const [log, setLog] = useState<string[]>([]);
 
   const id = useMemo(() => slug(prompt), [prompt]);
   const credits = 12 + plan.length * 3;
-  const framework = input.framework && input.framework !== "auto" ? input.framework : "LangGraph";
+  const framework = input.framework && input.framework !== "auto" ? input.framework : scenario.framework;
 
   useEffect(() => {
     if (stage !== "thinking") return;
@@ -48,18 +54,23 @@ export default function NewBuild() {
 
   useEffect(() => {
     if (stage !== "build") return;
-    if (step >= BUILD_STEPS.length) {
+    if (step >= steps.length) {
       const t = setTimeout(() => setStage("done"), 500);
       return () => clearTimeout(t);
     }
-    const s = BUILD_STEPS[step];
+    const s = steps[step];
     const timers = s.files.map((f, i) => setTimeout(() => setLog((l) => [...l, `+ ${f}`]), 180 * (i + 1)));
     const t = setTimeout(() => setStep((x) => x + 1), 260 + s.files.length * 200);
     return () => {
       timers.forEach(clearTimeout);
       clearTimeout(t);
     };
-  }, [stage, step]);
+  }, [stage, step, steps]);
+
+  const toPlan = (a: Record<string, string>) => {
+    setPlan(planFor(scenario, a));
+    setStage("plan");
+  };
 
   const approve = () => {
     spend(credits);
@@ -78,13 +89,17 @@ export default function NewBuild() {
       prompts: 1,
       framework,
       readiness: 46,
+      scenario: scenario.id,
+      prompt,
+      answers,
+      isNew: true,
     });
     toast("Project created · restore point #1 saved");
     nav(`/app/p/${id}`, { state: { fresh: true } });
   };
 
-  const previewStage = stage === "done" ? 4 : Math.min(4, Math.floor((step / BUILD_STEPS.length) * 5));
-  const steps = ["requirements", "plan", "build"];
+  const previewStage = stage === "done" ? 4 : Math.min(4, Math.floor((step / steps.length) * 5));
+  const phases = ["requirements", "plan", "build"];
   const currentIdx = stage === "thinking" || stage === "clarify" ? 0 : stage === "plan" ? 1 : 2;
 
   return (
@@ -97,7 +112,7 @@ export default function NewBuild() {
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          {steps.map((s, i) => (
+          {phases.map((s, i) => (
             <div key={s} className="flex items-center gap-1">
               <span
                 className={cx(
@@ -108,7 +123,7 @@ export default function NewBuild() {
                 {i < currentIdx && <Check size={9} />}
                 {s}
               </span>
-              {i < steps.length - 1 && <span className="text-dim text-[0.6rem]">—</span>}
+              {i < phases.length - 1 && <span className="text-dim text-[0.6rem]">—</span>}
             </div>
           ))}
         </div>
@@ -126,9 +141,35 @@ export default function NewBuild() {
       {stage === "clarify" && (
         <div className="flex-1 max-w-[720px] w-full mx-auto px-4 md:px-8 py-10 rise">
           <h1 className="font-sans text-[1.5rem] font-semibold tracking-[-0.02em] m-0">A few clarifying questions</h1>
-          <p className="text-[0.82rem] text-muted mt-1.5 mb-8">Your answers shape the plan. If you skip, Architect will apply recommended defaults.</p>
+          <p className="text-[0.82rem] text-muted mt-1.5 mb-5">Your answers shape the plan. If you skip, Architect will apply recommended defaults.</p>
+          <div className="border border-line rounded-lg px-3.5 py-3 mb-8 bg-surface/60">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="text-[0.8rem]">
+                <span className="text-dim">Closest template · </span>
+                <span className="font-semibold">{scenario.label}</span>
+                {scenarioId === detected.scenario.id && detected.matched.length > 0 && (
+                  <span className="text-dim"> · matched on {detected.matched.slice(0, 3).map((m) => `“${m}”`).join(", ")}</span>
+                )}
+              </div>
+              <div className="flex gap-1">
+                {SCENARIO_LIST.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => (setScenarioId(s.id), setAnswers({}))}
+                    className={cx(
+                      "text-[0.7rem] px-2 py-1 rounded-[5px] border cursor-pointer",
+                      s.id === scenarioId ? "bg-fg text-bg border-fg" : "border-line-2 text-muted hover:text-fg",
+                    )}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {mode === "dev" && <div className="font-mono text-[0.58rem] text-dim mt-1.5">Architect starts from this template and adapts it to your answers. Change it if the match is wrong.</div>}
+          </div>
           <div className="space-y-7">
-            {CLARIFY_QUESTIONS.map((q, qi) => (
+            {questions.map((q, qi) => (
               <div key={q.id}>
                 <div className="text-[0.88rem] font-semibold mb-2.5">
                   <span className="text-dim mr-2">{String(qi + 1).padStart(2, "0")}</span>
@@ -152,10 +193,16 @@ export default function NewBuild() {
             ))}
           </div>
           <div className="flex justify-between mt-10">
-            <Btn variant="ghost" onClick={() => setStage("plan")}>
+            <Btn
+              variant="ghost"
+              onClick={() => {
+                setAnswers({});
+                toPlan({});
+              }}
+            >
               Skip and use defaults
             </Btn>
-            <Btn variant="primary" onClick={() => setStage("plan")}>
+            <Btn variant="primary" onClick={() => toPlan(answers)}>
               Generate plan →
             </Btn>
           </div>
@@ -223,14 +270,14 @@ export default function NewBuild() {
                 <span className="font-mono text-[2.4rem] font-bold tracking-[-0.05em] text-neon-ink leading-none">{credits}</span>
                 <span className="text-[0.8rem] text-dim">credits · approx. 4 minutes</span>
               </div>
-              <div className="text-[0.75rem] text-dim mt-1">Estimated operating cost: ~$18/month at 2,000 tickets</div>
+              <div className="text-[0.75rem] text-dim mt-1">{scenario.costNote}</div>
             </div>
             <div className="border-t border-line pt-4 space-y-2.5">
               {[
                 ["Framework", framework, "Suited to multi-step workflows with approval checkpoints"],
                 ["Technology", input.stack && input.stack !== "auto" ? input.stack : "Next.js + Python agents", null],
-                ["AI models", "Low-cost model for triage; advanced model for replies", "Routed by task complexity"],
-                ["Approval policy", "Refunds over $100 require approval", null],
+                ["AI models", "Low-cost model for routine steps; advanced model for judgement", "Routed by task complexity"],
+                ["Approval policy", policyFor(scenario, answers.autonomy), "From your answer on autonomy"],
                 ["Hosting", "Architect Cloud (US region)", null],
               ].map(([k, v, why]) => (
                 <div key={k as string}>
@@ -251,13 +298,9 @@ export default function NewBuild() {
             {mode === "dev" && (
               <div className="bg-ink border border-ink-line rounded-md p-3 font-mono text-[0.58rem] text-[#999] leading-relaxed">
                 <div className="text-[#555] mb-1">tree</div>
-                app/ inbox/ ticket/[id]/ analytics/
-                <br />
-                agents/ classifier.py responder.py escalator.py graph.py
-                <br />
-                tools/ search_docs.py zendesk.py
-                <br />
-                db/ schema.ts · tests/ · architect.yaml
+                {scenario.tree.map((l) => (
+                  <div key={l}>{l}</div>
+                ))}
               </div>
             )}
             <Btn variant="primary" size="lg" className="w-full" onClick={approve}>
@@ -276,12 +319,12 @@ export default function NewBuild() {
             <div className="flex items-center justify-between mb-2">
               <Label>{stage === "done" ? "complete" : "in progress"}</Label>
               <span className="text-[0.75rem] text-dim">
-                {Math.min(step, BUILD_STEPS.length)}/{BUILD_STEPS.length}
+                {Math.min(step, steps.length)}/{steps.length}
               </span>
             </div>
-            <Bar value={(step / BUILD_STEPS.length) * 100} className="mb-5" />
+            <Bar value={(step / steps.length) * 100} className="mb-5" />
             <div className="space-y-2">
-              {BUILD_STEPS.map((s, i) => (
+              {steps.map((s, i) => (
                 <div key={s.label} className={cx("flex items-center gap-2.5 text-[0.82rem]", i < step ? "text-muted" : i === step ? "text-fg" : "text-dim")}>
                   <span className="w-4 flex justify-center">
                     {i < step ? <Check size={11} className="text-live" /> : i === step && stage === "build" ? <Spinner className="!w-2.5 !h-2.5" /> : <span className="w-1 h-1 rounded-full bg-line-2" />}
@@ -308,7 +351,9 @@ export default function NewBuild() {
                   <div className="text-[0.88rem] font-semibold flex items-center gap-2">
                     <Check size={13} /> Ready for review
                   </div>
-                  <div className="text-[0.78rem] text-muted mt-1">3 screens · 3 agents · 8 automated tests passing · restore point #1</div>
+                  <div className="text-[0.78rem] text-muted mt-1">
+                    {plan.filter((x) => x.kind === "page").length} screens · {plan.filter((x) => x.kind === "agent").length} agents · {scenario.tests} automated tests passing · restore point #1
+                  </div>
                 </div>
                 <Btn variant="primary" size="lg" className="w-full mt-3" onClick={open}>
                   Open project →
@@ -323,7 +368,7 @@ export default function NewBuild() {
               {stage === "build" && <Badge tone="warn">live</Badge>}
             </div>
             <div className="flex-1 rounded-lg border border-line overflow-hidden shadow-sm">
-              <AppPreview stage={previewStage} />
+              <AppPreview scenario={scenario} stage={previewStage} />
             </div>
             {mode === "dev" && stage === "done" && (
               <div className="text-[0.75rem] text-dim mt-2 flex items-center gap-1.5">

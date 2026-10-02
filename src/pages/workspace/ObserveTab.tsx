@@ -36,7 +36,7 @@ const SPANS: Span[] = [
   { name: "llm · classify", kind: "llm", start: 30, dur: 380, depth: 2, model: "haiku-4.5", tokens: 812, cost: 0.0008, input: "Ticket #4812: Charged twice for march invoice…", output: '{"intent":"refund","urgency":"high","confidence":0.94}' },
   { name: "responder", kind: "agent", start: 440, dur: 1220, depth: 1 },
   { name: "tool · search_docs", kind: "tool", start: 450, dur: 180, depth: 2, input: '{"q":"double charge refund policy"}', output: "3 docs · refund-policy.md (0.89)" },
-  { name: "llm · draft_reply", kind: "llm", start: 640, dur: 1010, depth: 2, model: "sonnet-4.5", tokens: 2410, cost: 0.0121, input: "system: you are a support agent… context: refund-policy.md", output: "Hi Dana — sorry about the double charge…" },
+  { name: "llm · draft_reply", kind: "llm", start: 640, dur: 1010, depth: 2, model: "sonnet-5", tokens: 2410, cost: 0.0121, input: "system: you are a support agent… context: refund-policy.md", output: "Hi Dana — sorry about the double charge…" },
   { name: "escalator", kind: "agent", start: 1670, dur: 460, depth: 1 },
   { name: "policy · refund > $100", kind: "tool", start: 1680, dur: 40, depth: 2, output: "requires_approval=true" },
   { name: "human · approval", kind: "human", start: 1730, dur: 400, depth: 2, output: "pending · #support-leads" },
@@ -305,7 +305,7 @@ export default function ObserveTab() {
               <div className="border border-line rounded-lg p-5">
                 <Label className="mb-3">spend by model · month to date</Label>
                 {[
-                  ["sonnet-4.5 · responder", 9.8],
+                  ["sonnet-5 · responder", 9.8],
                   ["haiku-4.5 · classifier", 2.1],
                   ["embeddings · search_docs", 1.4],
                   ["gpt-4.1 · fallback", 0.9],

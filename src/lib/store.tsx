@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PROJECTS, SHARED_PROJECTS, type Project } from "./data";
 import { api } from "./api";
 
@@ -6,6 +6,7 @@ export type Mode = "simple" | "dev";
 export type Theme = "light" | "dark";
 
 export interface User {
+  id: string;
   name: string;
   email: string;
   workspace: string;
@@ -87,13 +88,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  useEffect(() => {
-    api
-      .me()
-      .then(({ user }) => setUser(user))
-      .catch(() => setUser(null))
-      .finally(() => setAuthLoading(false));
-  }, []);
   const [mode, setModeState] = useState<Mode>(() => load("mode", "simple"));
   const [theme, setThemeState] = useState<Theme>(() => load("theme", "light"));
   const [credits, setCredits] = useState(840);
@@ -106,6 +100,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [helpOpen, setHelpOpen] = useState(false);
   const [shared, setSharedState] = useState<Record<string, unknown>>({});
   const setShared = useCallback((key: string, value: unknown) => setSharedState((s) => ({ ...s, [key]: value })), []);
+
+  /* Projects and workspace state persist per user in this browser, so the
+     prototype survives a reload. Hydrate first, then save on every change. */
+  const hydratedFor = useRef<string | null>(null);
+  const applyUser = useCallback((u: User | null) => {
+    if (u && u.id !== hydratedFor.current) {
+      const saved = load<{ projects: Project[]; shared: Record<string, unknown> } | null>(`ws.${u.id}`, null);
+      setProjects(saved?.projects ?? [...PROJECTS, ...SHARED_PROJECTS]);
+      setSharedState(saved?.shared ?? {});
+    }
+    hydratedFor.current = u?.id ?? null;
+    setUser(u);
+  }, []);
+  useEffect(() => {
+    api
+      .me()
+      .then(({ user }) => applyUser(user))
+      .catch(() => applyUser(null))
+      .finally(() => setAuthLoading(false));
+  }, [applyUser]);
+  useEffect(() => {
+    if (user && hydratedFor.current === user.id) save(`ws.${user.id}`, { projects, shared });
+  }, [user, projects, shared]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -121,10 +138,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       authLoading,
-      signIn: setUser,
+      signIn: applyUser,
       signOut: async () => {
         await api.logout().catch(() => undefined);
-        setUser(null);
+        applyUser(null);
       },
       mode,
       setMode: (m) => {
@@ -162,7 +179,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       helpOpen,
       setHelpOpen,
     }),
-    [user, authLoading, mode, theme, credits, projects, notices, paletteOpen, toasts, toast, shared, setShared, org, sidebarPinned, helpOpen],
+    [user, authLoading, applyUser, mode, theme, credits, projects, notices, paletteOpen, toasts, toast, shared, setShared, org, sidebarPinned, helpOpen],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -172,6 +189,11 @@ export function useStore() {
   const s = useContext(Ctx);
   if (!s) throw new Error("useStore outside StoreProvider");
   return s;
+}
+
+/** URL-safe handle for the signed-in user, e.g. for invite links and GitHub. */
+export function handleOf(u: User | null) {
+  return (u?.email.split("@")[0] ?? "me").replace(/[^a-z0-9-]/gi, "").toLowerCase();
 }
 
 /** Cross-page state for the prototype (e.g. readiness values read by deploy pre-flight). */

@@ -30,7 +30,7 @@ const TABLES: Record<string, { cols: string[]; rows: string[][]; count: string }
     rows: [
       ["ap_77", "zendesk.refund", "$240", "—", "pending", "—"],
       ["ap_76", "zendesk.refund", "$180", "priya@acme.com", "approved", "2026-09-30 16:02"],
-      ["ap_75", "email.bulk_send", "1,204", "ajay@acme.com", "declined", "2026-09-29 11:40"],
+      ["ap_75", "email.bulk_send", "1,204", "elena@acme.com", "declined", "2026-09-29 11:40"],
     ],
   },
 };

@@ -95,7 +95,7 @@ runtime:
   app: nextjs
   agents: python3.13
 models:
-  default: sonnet-4.5
+  default: sonnet-5
   routes:
     classifier: haiku-4.5
   fallback: gpt-4.1

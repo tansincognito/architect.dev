@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n web,api -c green,cyan \"vite --port 5180\" \"npm:api\"",
+    "dev": "concurrently -k -n web,api -c green,cyan \"vite --port 5180\" \"\\\"$npm_node_execpath\\\" --disable-warning=ExperimentalWarning --watch server/index.ts\"",
     "web": "vite --port 5180",
-    "api": "node --experimental-sqlite --experimental-strip-types --disable-warning=ExperimentalWarning --watch server/index.ts",
+    "api": "\"$npm_node_execpath\" --disable-warning=ExperimentalWarning --watch server/index.ts",
     "build": "tsc -p . && vite build",
     "typecheck": "tsc -p .",
     "preview": "vite preview"
@@ -31,6 +31,6 @@
     "vite": "^8.3.2"
   },
   "engines": {
-    "node": ">=22.12"
+    "node": ">=22.18"
   }
 }

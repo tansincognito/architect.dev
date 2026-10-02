@@ -3,7 +3,7 @@ import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Check, Code2, Sparkles, Users } from "lucide-react";
 import { Logo } from "../components/Shell";
 import { Btn, Field, GithubMark, Input, Label, Pills, Spinner, cx } from "../components/ui";
-import { useStore, type Mode } from "../lib/store";
+import { handleOf, useStore, type Mode } from "../lib/store";
 import { api, ApiError } from "../lib/api";
 
 function AuthFrame({ children, aside }: { children: React.ReactNode; aside?: React.ReactNode }) {
@@ -266,7 +266,7 @@ export function Onboarding() {
             <div className="flex-1">
               <div className="text-[0.88rem] font-semibold">GitHub Enterprise</div>
               <div className="text-[0.75rem] text-dim">
-                {gh === "done" ? "Connected as @ajay · 3 organisations · 41 repositories" : "Read and write access to selected repositories only"}
+                {gh === "done" ? `Connected as @${handleOf(user)} · 3 organisations · 41 repositories` : "Read and write access to selected repositories only"}
               </div>
             </div>
             {gh === "done" ? (

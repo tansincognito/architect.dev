@@ -35,28 +35,6 @@ const ACCENT: Record<NodeKind, string> = {
   human: "var(--warn)",
 };
 
-export const SUPPORT_NODES: GNode[] = [
-  { id: "trigger", kind: "trigger", label: "New ticket", sub: "Zendesk webhook", x: 40, y: 150 },
-  { id: "classifier", kind: "agent", label: "classifier", sub: "haiku-4.5 · v7", x: 230, y: 150 },
-  { id: "responder", kind: "agent", label: "responder", sub: "sonnet-4.5 · v12", x: 430, y: 150 },
-  { id: "search_docs", kind: "tool", label: "search_docs", sub: "Help centre search", x: 430, y: 290 },
-  { id: "memory", kind: "memory", label: "Customer memory", sub: "Per-customer history", x: 230, y: 290 },
-  { id: "escalator", kind: "agent", label: "escalator", sub: "policy · v3", x: 630, y: 150 },
-  { id: "human", kind: "human", label: "Approval", sub: "#support-leads · 4h SLA", x: 630, y: 290 },
-  { id: "zendesk", kind: "tool", label: "zendesk.reply", sub: "Write · approval required", x: 830, y: 150 },
-];
-
-export const SUPPORT_EDGES: GEdge[] = [
-  { from: "trigger", to: "classifier" },
-  { from: "classifier", to: "responder" },
-  { from: "memory", to: "classifier" },
-  { from: "responder", to: "search_docs", label: "tool" },
-  { from: "responder", to: "escalator" },
-  { from: "escalator", to: "human", label: "refund > $100" },
-  { from: "escalator", to: "zendesk", label: "else" },
-  { from: "human", to: "zendesk", label: "approved" },
-];
-
 const W = 150;
 const H = 54;
 

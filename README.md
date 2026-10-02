@@ -6,7 +6,7 @@ Everything is simulated except **authentication**, which is real: email + passwo
 
 ## Run
 
-Requires Node.js 22.12 or later (uses the built-in `node:sqlite`).
+Requires Node.js 22.18 or later (uses built-in `node:sqlite` and TypeScript type stripping).
 
 ```bash
 npm install

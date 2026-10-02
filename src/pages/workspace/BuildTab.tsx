@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
 import { ArrowUp, Check, HelpCircle, History, Monitor, MousePointerClick, RotateCcw, RotateCw, Smartphone, Tablet, X } from "lucide-react";
 import { AppPreview } from "../../components/AppPreview";
 import { Badge, Btn, Label, Spinner, cx } from "../../components/ui";
-import { useStore } from "../../lib/store";
+import { scenarioFor, type Scenario } from "../../lib/scenarios";
+import { useShared, useStore } from "../../lib/store";
 import { useProject } from "./Workspace";
 
 interface Msg {
@@ -17,40 +17,32 @@ interface Msg {
   target?: string;
 }
 
-const INITIAL: Msg[] = [
-  { id: 1, role: "user", text: "Customer support agent that triages Zendesk tickets" },
-  {
-    id: 2,
-    role: "ai",
-    text: "Built the inbox, ticket view and analytics. Three agents: classifier, responder, escalator. Refunds over $100 wait for a human.",
-    steps: ["10 plan items delivered", "21 files generated", "8 automated tests passing"],
-    files: ["app/inbox/page.tsx", "agents/graph.py", "agents/escalator.py"],
-    checkpoint: 1,
-  },
-  { id: 3, role: "user", text: "Show the confidence percentage next to each ticket category" },
-  {
-    id: 4,
-    role: "ai",
-    text: "Added a confidence column from the classifier output. Hidden on mobile.",
-    steps: ["2 files updated"],
-    files: ["components/TicketRow.tsx", "agents/classifier.py"],
-    checkpoint: 2,
-  },
-];
-
-const EXPLAIN: Record<string, string> = {
-  navbar: "Top navigation. Links to inbox, analytics and settings. Lives in app/layout.tsx.",
-  stats: "Live counters computed from the tickets table every 30s.",
-  "ticket-list": "Each row is a ticket. The tag + % come from the classifier agent.",
-  "draft-panel": "The responder agent's draft. Because it's a refund over $100, the escalator holds it for approval.",
-};
+function initialMsgs(s: Scenario, prompt: string, isNew: boolean): Msg[] {
+  const first: Msg[] = [
+    { id: 1, role: "user", text: prompt },
+    {
+      id: 2,
+      role: "ai",
+      text: s.summary,
+      steps: [`${s.plan.length + 2} plan items delivered`, "21 files generated", `${s.tests} automated tests passing`],
+      files: s.steps.slice(2, 5).map((x) => x.files[0]),
+      checkpoint: 1,
+    },
+  ];
+  if (isNew) return first;
+  return [
+    ...first,
+    { id: 3, role: "user", text: s.followUp.ask },
+    { id: 4, role: "ai", text: s.followUp.reply, steps: [`${s.followUp.files.length} files updated`], files: s.followUp.files, checkpoint: 2 },
+  ];
+}
 
 export default function BuildTab() {
   const p = useProject();
-  const loc = useLocation();
-  const fresh = (loc.state as { fresh?: boolean } | null)?.fresh;
+  const scenario = scenarioFor(p);
   const { mode, spend, toast } = useStore();
-  const [msgs, setMsgs] = useState<Msg[]>(fresh ? INITIAL.slice(0, 2) : INITIAL);
+  const [msgs, setMsgs] = useShared<Msg[]>(`chat.${p.id}`, () => initialMsgs(scenario, p.prompt ?? scenario.seedPrompt, !!p.isNew));
+  const [changes, setChanges] = useShared<string[]>(`changes.${p.id}`, () => []);
   const [text, setText] = useState("");
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [picking, setPicking] = useState(false);
@@ -58,43 +50,42 @@ export default function BuildTab() {
   const [timeline, setTimeline] = useState(false);
   const [viewing, setViewing] = useState<number | null>(null);
   const [explain, setExplain] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const checkpoints = msgs.filter((m) => m.checkpoint).map((m) => m.checkpoint!);
   const latest = checkpoints[checkpoints.length - 1] ?? 1;
+  /** Restore point that holds the initial build; each later point adds one change. */
+  const latestBase = p.isNew ? 1 : 2;
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = listRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [msgs]);
 
   const send = () => {
     if (!text.trim()) return;
     const id = Date.now();
     const target = selected ?? undefined;
-    setMsgs((m) => [
-      ...m,
-      { id, role: "user", text: text.trim(), target },
-      { id: id + 1, role: "ai", text: "", pending: true },
-    ]);
+    const request = text.trim();
+    const base: Msg[] = [...msgs, { id, role: "user", text: request, target }];
+    setMsgs([...base, { id: id + 1, role: "ai", text: "", pending: true }]);
     setText("");
     setSelected(null);
     setPicking(false);
     setTimeout(() => {
       spend(3);
-      setMsgs((m) =>
-        m.map((x) =>
-          x.id === id + 1
-            ? {
-                ...x,
-                pending: false,
-                text: target ? `The ${target} has been updated as requested. The preview reflects the change.` : "The change is complete and the preview has been updated.",
-                steps: ["1 file updated", "all tests passing"],
-                files: [target ? `components/${target}.tsx` : "app/inbox/page.tsx"],
-                checkpoint: latest + 1,
-              }
-            : x,
-        ),
-      );
+      setChanges([...changes, request]);
+      setMsgs([
+        ...base,
+        {
+          id: id + 1,
+          role: "ai",
+          text: target ? `The ${target} has been updated as requested. The preview reflects the change.` : `Added “${request}”. The preview has been updated.`,
+          steps: ["1 file updated", "all tests passing"],
+          files: [target ? `components/${target}.tsx` : `app${scenario.path}/page.tsx`],
+          checkpoint: latest + 1,
+        },
+      ]);
     }, 1600);
   };
 
@@ -105,7 +96,7 @@ export default function BuildTab() {
       {/* chat */}
       <div className="border-r border-line flex flex-col min-h-0">
         <div className="flex items-center justify-between px-4 py-2 border-b border-line">
-          <Label>conversation · {p.prompts || msgs.filter((m) => m.role === "user").length} requests</Label>
+          <Label>conversation · {msgs.filter((m) => m.role === "user").length} requests</Label>
           <button
             onClick={() => setTimeline((t) => !t)}
             className={cx("text-[0.75rem] inline-flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded", timeline ? "bg-surface-2 text-fg" : "text-dim hover:text-fg")}
@@ -146,7 +137,8 @@ export default function BuildTab() {
                     variant="primary"
                     onClick={() => {
                       toast(`Restored point #${viewing}. Later changes preserved on a separate branch.`);
-                      setMsgs((m) => m.slice(0, m.findIndex((x) => x.checkpoint === viewing) + 1));
+                      setMsgs(msgs.slice(0, msgs.findIndex((x) => x.checkpoint === viewing) + 1));
+                      setChanges(changes.slice(0, Math.max(0, viewing - latestBase)));
                       setViewing(null);
                     }}
                   >
@@ -158,7 +150,7 @@ export default function BuildTab() {
           </div>
         )}
 
-        <div className="flex-1 overflow-auto px-4 py-4 space-y-4">
+        <div ref={listRef} className="flex-1 overflow-auto px-4 py-4 space-y-4">
           {msgs.map((m) =>
             m.role === "user" ? (
               <div key={m.id} className="flex justify-end">
@@ -216,7 +208,6 @@ export default function BuildTab() {
               </div>
             ),
           )}
-          <div ref={endRef} />
         </div>
 
         <div className="p-3 border-t border-line">
@@ -298,7 +289,7 @@ export default function BuildTab() {
             ))}
           </div>
           <div className="flex-1 max-w-[420px] text-[0.75rem] text-dim bg-bg border border-line rounded px-2.5 py-1 truncate">
-            {p.id}.preview.architect.app/inbox
+            {p.id}.preview.architect.app{scenario.path}
           </div>
           <div className="flex items-center gap-2">
             {picking && <Badge tone="neon">select an element</Badge>}
@@ -313,6 +304,8 @@ export default function BuildTab() {
             style={{ width: deviceW, maxWidth: "100%" }}
           >
             <AppPreview
+              scenario={scenario}
+              changes={viewing !== null ? changes.slice(0, Math.max(0, viewing - latestBase)) : changes}
               device={device}
               stage={viewing === 1 ? 3 : 4}
               selectable={picking}
@@ -331,7 +324,9 @@ export default function BuildTab() {
                   <X size={11} />
                 </button>
               </div>
-              <div className="text-[0.75rem] leading-relaxed">{EXPLAIN[selected]}</div>
+              <div className="text-[0.75rem] leading-relaxed">
+                {selected.startsWith("change-") ? `Added by your request: “${changes[Number(selected.slice(7)) - 1]}”.` : scenario.explain[selected as keyof Scenario["explain"]]}
+              </div>
             </div>
           )}
         </div>

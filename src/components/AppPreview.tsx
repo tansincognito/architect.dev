@@ -1,37 +1,29 @@
+import { SCENARIOS, type Scenario } from "../lib/scenarios";
 import { cx } from "./ui";
 
-const TICKETS = [
-  { id: "#4812", subj: "Charged twice for march invoice", tag: "refund", urg: "high", conf: 0.94 },
-  { id: "#4811", subj: "How do I export my data to csv?", tag: "how-to", urg: "low", conf: 0.98 },
-  { id: "#4810", subj: "SSO login loop on safari", tag: "bug", urg: "high", conf: 0.87 },
-  { id: "#4809", subj: "Can we upgrade mid-cycle?", tag: "billing", urg: "med", conf: 0.91 },
-  { id: "#4808", subj: "API rate limit questions", tag: "how-to", urg: "low", conf: 0.96 },
-];
-
-const TAG_COLOR: Record<string, string> = {
-  refund: "#dc2626",
-  "how-to": "#5dba00",
-  bug: "#d97706",
-  billing: "#2563eb",
-};
-
 /**
- * Fake generated app ("support triage" inbox). `stage` 0-4 progressively reveals
- * sections so the build flow can show the preview filling in.
+ * Fake generated app for a scenario. `stage` 0-4 progressively reveals
+ * sections so the build flow can show the preview filling in. `changes` are
+ * chat requests applied after the initial build, rendered as new sections.
  */
 export function AppPreview({
+  scenario = SCENARIOS.support,
   stage = 4,
+  changes = [],
   selectable,
   selected,
   onSelect,
   device = "desktop",
 }: {
+  scenario?: Scenario;
   stage?: number;
+  changes?: string[];
   selectable?: boolean;
   selected?: string | null;
   onSelect?: (el: string) => void;
   device?: "desktop" | "tablet" | "mobile";
 }) {
+  const { preview, brand, nav } = scenario;
   const pick = (el: string) => (selectable ? () => onSelect?.(el) : undefined);
   const sel = (el: string) =>
     cx(
@@ -44,12 +36,17 @@ export function AppPreview({
     <div className="bg-white text-[#111] h-full w-full overflow-auto font-sans text-[12px]" style={{ colorScheme: "light" }}>
       {stage >= 1 ? (
         <div onClick={pick("navbar")} className={cx("flex items-center justify-between px-4 h-11 border-b border-[#eee]", sel("navbar"))}>
-          <div className="font-bold tracking-tight">helpdesk<span className="text-[#5dba00]">.ai</span></div>
+          <div className="font-bold tracking-tight">
+            {brand[0]}
+            <span className="text-[#5dba00]">{brand[1]}</span>
+          </div>
           {!narrow && (
             <div className="flex gap-4 text-[#888] text-[11px]">
-              <span className="text-[#111] font-medium">inbox</span>
-              <span>analytics</span>
-              <span>settings</span>
+              {nav.map((n, i) => (
+                <span key={n} className={i === 0 ? "text-[#111] font-medium" : undefined}>
+                  {n}
+                </span>
+              ))}
             </div>
           )}
           <div className="w-6 h-6 rounded-full bg-[#eee]" />
@@ -62,11 +59,7 @@ export function AppPreview({
         <div>
           {stage >= 2 ? (
             <div onClick={pick("stats")} className={cx("grid grid-cols-3 gap-2 mb-4", sel("stats"))}>
-              {[
-                ["open", "128"],
-                ["auto-resolved", "61%"],
-                ["avg first reply", "42s"],
-              ].map(([k, v]) => (
+              {preview.stats.map(([k, v]) => (
                 <div key={k} className="border border-[#eee] rounded-lg p-2.5">
                   <div className="text-[10px] text-[#999]">{k}</div>
                   <div className="text-[18px] font-bold tracking-tight">{v}</div>
@@ -82,12 +75,12 @@ export function AppPreview({
           )}
 
           {stage >= 3 ? (
-            <div onClick={pick("ticket-list")} className={cx("border border-[#eee] rounded-lg overflow-hidden", sel("ticket-list"))}>
-              {TICKETS.map((t) => (
+            <div onClick={pick("list")} className={cx("border border-[#eee] rounded-lg overflow-hidden", sel("list"))}>
+              {preview.rows.map((t) => (
                 <div key={t.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-[#f2f2f2] last:border-0">
-                  <span className="text-[10px] text-[#aaa] w-10">{t.id}</span>
-                  <span className="flex-1 truncate">{t.subj}</span>
-                  <span className="text-[9px] px-1.5 py-px rounded" style={{ color: TAG_COLOR[t.tag], background: `${TAG_COLOR[t.tag]}15` }}>
+                  <span className="text-[10px] text-[#aaa] w-14 shrink-0">{t.id}</span>
+                  <span className="flex-1 truncate">{t.title}</span>
+                  <span className="text-[9px] px-1.5 py-px rounded" style={{ color: preview.tags[t.tag], background: `${preview.tags[t.tag]}15` }}>
                     {t.tag}
                   </span>
                   {!narrow && <span className="text-[10px] text-[#aaa] w-9 text-right">{Math.round(t.conf * 100)}%</span>}
@@ -101,19 +94,30 @@ export function AppPreview({
               ))}
             </div>
           )}
+
+          {stage >= 4 &&
+            changes.map((c, i) => (
+              <div key={i} onClick={pick(`change-${i + 1}`)} className={cx("mt-4 border border-[#b8f000] bg-[#f8fde8] rounded-lg p-3 rise", sel(`change-${i + 1}`))}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-semibold">{c}</span>
+                  <span className="text-[9px] text-[#5dba00] font-medium uppercase tracking-wide">new</span>
+                </div>
+                <div className="flex items-end gap-1 h-10">
+                  {[40, 65, 50, 80, 60, 90, 72].map((h, j) => (
+                    <div key={j} className="flex-1 bg-[#d9f28a] rounded-sm" style={{ height: `${(h + i * 7) % 100}%` }} />
+                  ))}
+                </div>
+              </div>
+            ))}
         </div>
 
         {stage >= 4 ? (
-          <div onClick={pick("draft-panel")} className={cx("border border-[#eee] rounded-lg p-3 h-fit", sel("draft-panel"))}>
-            <div className="text-[10px] text-[#999] mb-1">#4812 · drafted reply</div>
-            <div className="text-[11px] leading-relaxed text-[#444]">
-              Hi Dana — sorry about the double charge. I've flagged a refund of <b>$240</b> for approval; you'll see it within 3–5 days.
-            </div>
-            <div className="mt-3 text-[10px] bg-[#fff7e6] text-[#b45309] border border-[#fde3b0] rounded px-2 py-1">
-              refund &gt; $100 · needs human approval
-            </div>
+          <div onClick={pick("panel")} className={cx("border border-[#eee] rounded-lg p-3 h-fit", sel("panel"))}>
+            <div className="text-[10px] text-[#999] mb-1">{preview.panel.kicker}</div>
+            <div className="text-[11px] leading-relaxed text-[#444]">{preview.panel.body}</div>
+            <div className="mt-3 text-[10px] bg-[#fff7e6] text-[#b45309] border border-[#fde3b0] rounded px-2 py-1">{preview.panel.flag}</div>
             <div className="flex gap-1.5 mt-3">
-              <button className="flex-1 bg-[#111] text-white rounded-md py-1.5 text-[11px]">approve & send</button>
+              <button className="flex-1 bg-[#111] text-white rounded-md py-1.5 text-[11px]">{preview.panel.primary}</button>
               <button className="border border-[#ddd] rounded-md px-2 text-[11px]">edit</button>
             </div>
           </div>

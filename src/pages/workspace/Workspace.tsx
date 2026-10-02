@@ -107,11 +107,11 @@ export default function Workspace() {
 }
 
 function ShareModal({ open, onClose, project }: { open: boolean; onClose: () => void; project: Project }) {
-  const { toast } = useStore();
+  const { toast, user } = useStore();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("Editor");
   const [people, setPeople] = useState([
-    ["Ajay", "Owner"],
+    [user?.name ?? "You", "Owner"],
     ["Priya Sharma", "Editor"],
     ["#support-leads", "Approver"],
   ]);

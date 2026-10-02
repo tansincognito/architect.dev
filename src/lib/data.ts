@@ -19,6 +19,13 @@ export interface Project {
   /** Set when another member shared this project with you. */
   sharedBy?: string;
   views?: number;
+  /** Scenario template this project was generated from. */
+  scenario?: "support" | "finance" | "research";
+  /** Original prompt and clarifying answers, for projects created in this session. */
+  prompt?: string;
+  answers?: Record<string, string>;
+  /** Created in this session: no prior commits, deployments or versions. */
+  isNew?: boolean;
 }
 
 export const PROJECTS: Project[] = [
@@ -147,53 +154,11 @@ export const FRAMEWORKS: Framework[] = [
   { id: "custom", name: "Custom", lang: "Any", blurb: "Bring your own loop. We wrap it.", bestFor: "existing code" },
 ];
 
-export const CLARIFY_QUESTIONS = [
-  {
-    id: "users",
-    q: "Who will use this application?",
-    options: ["Internal staff only", "External customers", "Both internal and external"],
-  },
-  {
-    id: "data",
-    q: "Which system holds the source data?",
-    options: ["Zendesk", "Shared email inbox", "Salesforce Service Cloud", "File upload (CSV)"],
-  },
-  {
-    id: "autonomy",
-    q: "What level of autonomy should the agent have?",
-    options: ["Draft only; staff send every reply", "Auto-resolve routine requests", "Fully autonomous within policy"],
-  },
-];
-
 export interface PlanItem {
   kind: "page" | "agent" | "tool" | "data" | "integration";
   name: string;
   detail: string;
 }
-
-export const PLAN: PlanItem[] = [
-  { kind: "page", name: "/inbox", detail: "Ticket queue with AI classification and confidence" },
-  { kind: "page", name: "/ticket/:id", detail: "Conversation view with drafted reply; approve or edit" },
-  { kind: "page", name: "/analytics", detail: "Volume, automation rate and customer satisfaction" },
-  { kind: "agent", name: "classifier", detail: "Determines intent and urgency · low-cost model" },
-  { kind: "agent", name: "responder", detail: "Drafts replies based on approved help-centre content" },
-  { kind: "agent", name: "escalator", detail: "Routes refunds above $100 to an authorised approver" },
-  { kind: "tool", name: "search_docs", detail: "Searches the help centre knowledge base" },
-  { kind: "tool", name: "zendesk.update_ticket", detail: "Writes replies back to Zendesk; requires approval" },
-  { kind: "data", name: "tickets, drafts, approvals", detail: "Managed Postgres · 3 tables" },
-  { kind: "integration", name: "zendesk", detail: "OAuth · read and write access" },
-];
-
-export const BUILD_STEPS = [
-  { label: "Setting up application structure", files: ["package.json", "app/layout.tsx", "app/page.tsx"] },
-  { label: "Creating data model", files: ["db/schema.ts", "db/migrations/0001_init.sql"] },
-  { label: "Configuring classifier agent", files: ["agents/classifier.py", "agents/graph.py"] },
-  { label: "Configuring responder and escalation agents", files: ["agents/responder.py", "agents/escalator.py", "tools/search_docs.py"] },
-  { label: "Building ticket inbox", files: ["app/inbox/page.tsx", "components/TicketRow.tsx"] },
-  { label: "Building ticket view and approval controls", files: ["app/ticket/[id]/page.tsx", "components/ApproveBar.tsx"] },
-  { label: "Connecting Zendesk", files: ["lib/zendesk.ts", ".env.example"] },
-  { label: "Running automated tests", files: ["tests/smoke.test.ts"] },
-];
 
 export const TEMPLATES = [
   { id: "support", name: "Support triage agent", tag: "agent", fw: "LangGraph", uses: "2.4k", desc: "Classify, draft and escalate tickets. Zendesk or Intercom." },

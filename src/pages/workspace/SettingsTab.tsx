@@ -15,30 +15,31 @@ interface Secret {
   by: string;
 }
 
-const SECRETS: Secret[] = [
-  { key: "ZENDESK_TOKEN", env: "production", updated: "12 days ago", by: "ajay@acme.com" },
-  { key: "ZENDESK_TOKEN", env: "staging", updated: "12 days ago", by: "ajay@acme.com" },
+const secretsFor = (me: string): Secret[] => [
+  { key: "ZENDESK_TOKEN", env: "production", updated: "12 days ago", by: me },
+  { key: "ZENDESK_TOKEN", env: "staging", updated: "12 days ago", by: me },
   { key: "STRIPE_RESTRICTED_KEY", env: "production", updated: "1 month ago", by: "priya@acme.com" },
   { key: "DATABASE_URL", env: "all", updated: "managed", by: "Architect" },
 ];
 
-const AUDIT = [
-  ["2026-10-01 18:42", "ajay@acme.com", "Deployed v24 to production (canary)", "deploy"],
+const auditFor = (me: string) => [
+  ["2026-10-01 18:42", me, "Deployed v24 to production (canary)", "deploy"],
   ["2026-10-01 18:30", "Architect", "Applied 10 governance remediations (PR #42)", "governance"],
   ["2026-10-01 17:55", "priya@acme.com", "Approved refund $180 on #4790", "approval"],
-  ["2026-10-01 11:02", "ajay@acme.com", "Revealed secret ZENDESK_TOKEN (staging)", "security"],
-  ["2026-09-30 09:14", "ajay@acme.com", "Granted Marcus Lee viewer access", "access"],
+  ["2026-10-01 11:02", me, "Revealed secret ZENDESK_TOKEN (staging)", "security"],
+  ["2026-09-30 09:14", me, "Granted Marcus Lee viewer access", "access"],
 ];
 
 export default function SettingsTab() {
   const p = useProject();
   const nav = useNavigate();
-  const { toast, updateProject } = useStore();
+  const { toast, updateProject, user } = useStore();
+  const me = user?.email ?? "you@acme.com";
   const [section, setSection] = useState<Section>("general");
   const [env, setEnv] = useState<"all" | "production" | "staging">("all");
   const [revealed, setRevealed] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [secrets, setSecrets] = useState(SECRETS);
+  const [secrets, setSecrets] = useState(() => secretsFor(me));
   const [newKey, setNewKey] = useState("");
   const [delOpen, setDelOpen] = useState(false);
   const [confirm, setConfirm] = useState("");
@@ -73,7 +74,7 @@ export default function SettingsTab() {
             </Field>
             <div className="grid sm:grid-cols-2 gap-3">
               <Field label="business owner">
-                <Input defaultValue="Ajay (Head of Customer Operations)" />
+                <Input defaultValue={`${user?.name ?? "You"} (Head of Customer Operations)`} />
               </Field>
               <Field label="technical owner">
                 <Input defaultValue="Priya Sharma (Platform Engineering)" />
@@ -152,7 +153,7 @@ export default function SettingsTab() {
             <p className="text-[0.85rem] text-muted mb-4">Inherited from workspace roles unless overridden here.</p>
             <div className="border border-line rounded-lg overflow-hidden">
               {[
-                ["Ajay", "ajay@acme.com", "Owner"],
+                [user?.name ?? "You", me, "Owner"],
                 ["Priya Sharma", "priya@acme.com", "Editor"],
                 ["Support Leads (group)", "#support-leads", "Approver"],
                 ["Marcus Lee", "marcus@acme.com", "Viewer"],
@@ -182,12 +183,12 @@ export default function SettingsTab() {
           <div className="rise">
             <div className="flex items-end justify-between mb-4">
               <h2 className="text-[1.4rem] font-semibold tracking-[-0.02em] m-0">Audit log</h2>
-              <Btn size="sm" onClick={() => toast("Audit log export (CSV) sent to ajay@acme.com")}>
+              <Btn size="sm" onClick={() => toast(`Audit log export (CSV) sent to ${me}`)}>
                 Export
               </Btn>
             </div>
             <div className="border border-line rounded-lg overflow-hidden">
-              {AUDIT.map(([t, who, what, kind]) => (
+              {auditFor(me).map(([t, who, what, kind]) => (
                 <div key={t} className="grid grid-cols-[9rem_10rem_1fr_6rem] gap-3 items-center px-4 py-2.5 border-b border-line last:border-0">
                   <span className="font-mono text-[0.62rem] text-dim">{t}</span>
                   <span className="text-[0.78rem] truncate">{who}</span>

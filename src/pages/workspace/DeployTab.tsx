@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Check, Cloud, ExternalLink, Globe, RotateCcw, Server, X } from "lucide-react";
 import { Badge, Bar, Btn, Field, Input, Label, Modal, Pills, Spinner, Status, cx } from "../../components/ui";
 import { totalScore } from "../../lib/readiness";
+import type { Project } from "../../lib/data";
+import { scenarioFor, type Scenario } from "../../lib/scenarios";
 import { useShared, useStore } from "../../lib/store";
 import { useProject } from "./Workspace";
 import { useReadiness } from "./ReadinessTab";
@@ -19,12 +21,16 @@ interface Deploy {
   by: string;
 }
 
-const HISTORY: Deploy[] = [
-  { v: 23, env: "production", status: "live", commit: "a1f9c2e", msg: "Show confidence per ticket category", when: "2h ago", by: "ajay" },
-  { v: 22, env: "preview", status: "ready", commit: "77be010", msg: "Approval policy for refunds over $100", when: "1d ago", by: "architect" },
-  { v: 21, env: "production", status: "rolled back", commit: "e03d1aa", msg: "Responder model upgrade", when: "2d ago", by: "priya" },
-  { v: 20, env: "production", status: "ready", commit: "51c7f8b", msg: "Analytics dashboard", when: "3d ago", by: "ajay" },
-];
+function seedHistory(s: Scenario, p: Project, first: string): Deploy[] {
+  if (p.isNew) return [];
+  const live = p.status === "live";
+  return [
+    { v: 23, env: "production", status: live ? "live" : "ready", commit: "a1f9c2e", msg: s.changelog[0], when: "2h ago", by: first },
+    { v: 22, env: "preview", status: "ready", commit: "77be010", msg: s.changelog[1], when: "1d ago", by: "architect" },
+    { v: 21, env: "production", status: "rolled back", commit: "e03d1aa", msg: s.changelog[2], when: "2d ago", by: "priya" },
+    { v: 20, env: "production", status: "ready", commit: "51c7f8b", msg: s.changelog[3], when: "3d ago", by: first },
+  ];
+}
 
 const TARGETS = [
   { id: "architect", name: "Architect Cloud", icon: <Cloud size={14} />, d: "Fully managed · application, agents and data" },
@@ -33,26 +39,30 @@ const TARGETS = [
   { id: "docker", name: "Container image", icon: <Server size={14} />, d: "Publish to your registry · self-hosted" },
 ];
 
-const BUILD_LOG = [
-  "cloning acme/support-triage@a1f9c2e",
-  "detected next.js 16 + python 3.13 agents",
-  "installing dependencies (cached)",
-  "building app · 41 routes",
-  "packaging agents: classifier, responder, escalator",
-  "running 8 smoke tests … passed",
-  "migrating database (1 pending migration)",
-  "uploading build output · 14.2 MB",
-  "provisioning workers (1–8 autoscale)",
-  "health check /api/health … 200",
-];
 
 export default function DeployTab() {
   const p = useProject();
   const nav = useNavigate();
-  const { mode, toast, updateProject } = useStore();
+  const { mode, toast, updateProject, user } = useStore();
   const [values] = useReadiness(p.id);
   const readiness = totalScore(values);
-  const [history, setHistory] = useShared<Deploy[]>(`deploys.${p.id}`, () => HISTORY);
+  const first = (user?.name.split(" ")[0] ?? "you").toLowerCase();
+  const scenario = scenarioFor(p);
+  const [changes] = useShared<string[]>(`changes.${p.id}`, () => []);
+  const [history, setHistory] = useShared<Deploy[]>(`deploys.${p.id}`, () => seedHistory(scenario, p, first));
+  const commit = (p.id.length * 2654435761).toString(16).slice(-7);
+  const buildLog = [
+    `cloning ${p.repo ?? `architect-managed/${p.id}`}@${commit}`,
+    "detected next.js 16 + python 3.13 agents",
+    "installing dependencies (cached)",
+    `building app · ${scenario.plan.filter((x) => x.kind === "page").length + changes.length} routes`,
+    `packaging agents: ${scenario.agents.names.join(", ")}`,
+    `running ${scenario.tests} smoke tests … passed`,
+    p.isNew ? "creating database (initial migration)" : "migrating database (1 pending migration)",
+    "uploading build output · 14.2 MB",
+    "provisioning workers (1–8 autoscale)",
+    "health check /api/health … 200",
+  ];
   const [phase, setPhase] = useState<Phase>("idle");
   const [env, setEnv] = useState<"preview" | "staging" | "production">("preview");
   const [target, setTarget] = useState("architect");
@@ -67,10 +77,10 @@ export default function DeployTab() {
 
   const CHECKS = [
     { label: "Governance score", detail: `${readiness}/100 · minimum 60`, ok: readiness >= 60, fix: `/app/p/${p.id}/readiness` },
-    { label: "Automated tests", detail: "39 of 39 passed", ok: true },
+    { label: "Automated tests", detail: `${scenario.tests} of ${scenario.tests} passed`, ok: true },
     { label: "Quality evaluation", detail: "Accuracy 0.93 (baseline 0.91)", ok: true },
     { label: "Security scan", detail: "No credentials in code · 4 held in vault", ok: true },
-    { label: "Cost estimate", detail: "~$18/month at current volume", ok: true },
+    { label: "Cost estimate", detail: scenario.costNote.replace("Estimated operating cost: ", ""), ok: true },
   ];
   const blocked = CHECKS.some((c) => !c.ok);
 
@@ -83,13 +93,13 @@ export default function DeployTab() {
 
   useEffect(() => {
     if (phase !== "build") return;
-    if (logN >= BUILD_LOG.length) {
+    if (logN >= buildLog.length) {
       const t = setTimeout(() => setPhase("preview"), 500);
       return () => clearTimeout(t);
     }
     const t = setTimeout(() => setLogN((n) => n + 1), 320);
     return () => clearTimeout(t);
-  }, [phase, logN]);
+  }, [phase, logN, buildLog.length]);
 
   useEffect(() => {
     if (phase !== "rollout") return;
@@ -97,7 +107,7 @@ export default function DeployTab() {
       const t = setTimeout(() => {
         setPhase("live");
         updateProject(p.id, { status: "live", url: p.url ?? `${p.id}.architect.app` });
-        setHistory([{ v: nextV, env: "production", status: "live", commit: "c4e19ab", msg: "latest changes", when: "just now", by: "you" }, ...history.map((h) => (h.status === "live" ? { ...h, status: "ready" as const } : h))]);
+        setHistory([{ v: nextV, env: "production", status: "live", commit, msg: changes[changes.length - 1] ?? (p.isNew ? "Initial release" : "Latest changes"), when: "just now", by: first }, ...history.map((h) => (h.status === "live" ? { ...h, status: "ready" as const } : h))]);
         toast(`Version ${nextV} is live in production`);
       }, 400);
       return () => clearTimeout(t);
@@ -135,6 +145,7 @@ export default function DeployTab() {
             </div>
             <Label className="mb-2">release history</Label>
             <div className="border border-line rounded-lg overflow-hidden">
+              {history.length === 0 && <div className="px-4 py-5 text-[0.8rem] text-dim">No releases yet. Your first deployment will be version 1.</div>}
               {history.map((d) => (
                 <div key={d.v} className="grid grid-cols-[3rem_1fr_auto_auto] md:grid-cols-[3rem_1fr_6rem_6rem_auto] items-center gap-4 px-4 py-3 border-b border-line last:border-0">
                   <span className="font-mono text-[0.68rem] font-bold">v{d.v}</span>
@@ -198,7 +209,7 @@ export default function DeployTab() {
                   </select>
                 </Field>
                 <Field label="branch / commit">
-                  <Input defaultValue="main @ c4e19ab" />
+                  <Input defaultValue={`main @ ${commit}`} />
                 </Field>
               </div>
             )}
@@ -265,7 +276,7 @@ export default function DeployTab() {
               <Status status={phase === "build" ? "building" : phase === "rollout" ? "running" : phase === "live" ? "live" : "ready"} pulse={phase === "build" || phase === "rollout"} />
             </div>
             <div className="bg-ink border border-ink-line rounded-lg p-4 font-mono text-[0.62rem] text-[#888] leading-relaxed h-[230px] overflow-auto">
-              {BUILD_LOG.slice(0, logN).map((l, i) => (
+              {buildLog.slice(0, logN).map((l, i) => (
                 <div key={i}>
                   <span className="text-[#444] mr-3">{String(i * 2 + 1).padStart(2, "0")}s</span>
                   {l.includes("passed") || l.includes("200") ? <span className="text-neon">{l}</span> : l}

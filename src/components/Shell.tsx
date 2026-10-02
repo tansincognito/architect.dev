@@ -35,7 +35,7 @@ import {
   Store,
   Sun,
 } from "lucide-react";
-import { useStore } from "../lib/store";
+import { handleOf, useStore } from "../lib/store";
 import { Btn, Input, Label, Modal, cx } from "./ui";
 import { CommandPalette } from "./CommandPalette";
 import { HelpPanel } from "./HelpPanel";
@@ -307,12 +307,12 @@ function AccountButton({ collapsed }: { collapsed: boolean }) {
 }
 
 function ReferralModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { toast } = useStore();
+  const { toast, user } = useStore();
   return (
     <Modal open={open} onClose={onClose} title="Get $10 of free credits">
       <p className="text-[0.85rem] text-muted mt-0">Invite a colleague. When they build their first project, you both receive $10 of credits.</p>
       <div className="flex gap-2">
-        <Input readOnly value="architect.app/invite/acme-ajay" />
+        <Input readOnly value={`architect.app/invite/acme-${handleOf(user)}`} />
         <Btn onClick={() => toast("Invitation link copied")}>Copy</Btn>
       </div>
       <div className="flex gap-2 mt-3">

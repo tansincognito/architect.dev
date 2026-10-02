@@ -1,22 +1,19 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Play, Plus } from "lucide-react";
-import { AgentCanvas, SUPPORT_EDGES, SUPPORT_NODES, type GNode, type NodeKind } from "../../components/AgentCanvas";
+import { AgentCanvas, type GNode, type NodeKind } from "../../components/AgentCanvas";
 import { Badge, Btn, Field, Input, Label, Pills, Spinner, Toggle, cx } from "../../components/ui";
 import { FILES, highlight } from "../../lib/files";
+import { graphFor, runPathFor, scenarioFor, sourceFor } from "../../lib/scenarios";
 import { useStore } from "../../lib/store";
 import { useProject } from "./Workspace";
 
-const RUN_PATH = ["trigger", "memory", "classifier", "responder", "search_docs", "escalator", "human"];
-const RUN_LOG = [
-  "Trigger · ticket #4812 received",
-  "Memory · loaded 3 previous tickets for this customer",
-  "Classifier · refund · high urgency · 0.94 confidence",
-  "Responder · drafting reply",
-  "Knowledge search · refund-policy.md (0.89)",
-  "Escalation · $240 refund exceeds $100 limit; approval required",
-  "Approval · paused pending #support-leads",
-];
+const MODELS = ["haiku-4.5", "sonnet-5", "opus-5.5"];
+const MODEL_LABEL: Record<string, string> = {
+  "haiku-4.5": "Claude Haiku 4.5 (fast, low cost)",
+  "sonnet-5": "Claude Sonnet 5 (balanced)",
+  "opus-5.5": "Claude Opus 5.5 (most capable)",
+};
 
 const ADDABLE: { kind: NodeKind; label: string; sub: string }[] = [
   { kind: "agent", label: "Agent", sub: "Describe its responsibility" },
@@ -30,26 +27,38 @@ export default function AgentsTab() {
   const p = useProject();
   const { mode, toast } = useStore();
   const nav = useNavigate();
-  const [nodes, setNodes] = useState<GNode[]>(SUPPORT_NODES);
-  const [sel, setSel] = useState<string | null>("responder");
+  const scenario = scenarioFor(p);
+  const a = scenario.agents;
+  const graph = graphFor(scenario, p);
+  const runPath = runPathFor(scenario);
+  const [nodes, setNodes] = useState<GNode[]>(graph.nodes);
+  const [sel, setSel] = useState<string | null>(a.names[1]);
   const [view, setView] = useState<"canvas" | "code">("canvas");
   const [running, setRunning] = useState(false);
   const [step, setStep] = useState(0);
-  const [input, setInput] = useState("Charged twice for march invoice, please refund $240");
+  const [input, setInput] = useState(a.test.input);
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     if (!running) return;
-    if (step >= RUN_PATH.length) {
+    if (step >= runPath.length) {
       setRunning(false);
       return;
     }
     const t = setTimeout(() => setStep((s) => s + 1), 550);
     return () => clearTimeout(t);
-  }, [running, step]);
+  }, [running, step, runPath.length]);
 
   const node = nodes.find((n) => n.id === sel);
-  const active = RUN_PATH.slice(0, step);
+  const active = runPath.slice(0, step);
+  const tools = [a.tool[0], sourceFor(scenario, p.answers?.source).tool, ...a.extraTools];
+  const versions = p.isNew
+    ? [["v1", "Initial version", "live"]]
+    : [
+        ["v12", "Clearer, more concise tone", "live"],
+        ["v11", "Restricted to approved content", ""],
+        ["v10", "Initial version", ""],
+      ];
 
   const addNode = (a: (typeof ADDABLE)[number]) => {
     const id = `${a.label.replace(/\W+/g, "_")}_${nodes.length}`;
@@ -88,7 +97,7 @@ export default function AgentsTab() {
         {view === "canvas" ? (
           <AgentCanvas
             nodes={nodes}
-            edges={SUPPORT_EDGES}
+            edges={graph.edges}
             selected={sel}
             onSelect={setSel}
             onMove={(id, x, y) => setNodes((ns) => ns.map((n) => (n.id === id ? { ...n, x, y } : n)))}
@@ -118,13 +127,13 @@ export default function AgentsTab() {
           </div>
           {step > 0 && (
             <div className="px-3 pb-3 font-mono text-[0.6rem] space-y-1">
-              {RUN_LOG.slice(0, step).map((l, i) => (
+              {a.test.log.slice(0, step).map((l, i) => (
                 <div key={i} className={cx("rise", i === step - 1 && running ? "text-fg" : "text-muted")}>
                   <span className="text-dim mr-2">{String(i * 180).padStart(4, " ")}ms</span>
                   {l}
                 </div>
               ))}
-              {!running && step >= RUN_PATH.length && <div className="text-live pt-1">✓ Test complete · 7 steps · $0.013 · trace tr_sbx_01</div>}
+              {!running && step >= runPath.length && <div className="text-live pt-1">✓ Test complete · {runPath.length} steps · $0.013 · trace tr_sbx_01</div>}
             </div>
           )}
         </div>
@@ -140,24 +149,27 @@ export default function AgentsTab() {
             </div>
             {node.kind === "agent" && (
               <>
-                <Field label={mode === "simple" ? "responsibilities" : "system prompt · v12"}>
+                <Field label={mode === "simple" ? "responsibilities" : `system prompt · ${versions[0][0]}`}>
                   <textarea
-                    defaultValue={
-                      node.id === "responder"
-                        ? "You are a friendly support agent for Acme. Draft a reply using only the help-center docs. Never promise refunds; the escalator decides."
-                        : `You are the ${node.label}. Do one job well.`
-                    }
+                    key={node.id}
+                    defaultValue={node.id === a.names[1] ? a.prompt : `You are the ${node.label.replace(/_/g, " ")} for Acme. Do one job well and report your confidence.`}
                     rows={5}
                     className="w-full bg-bg border border-line-2 rounded-[7px] px-3 py-2 text-[0.82rem] leading-relaxed text-fg outline-none focus:border-fg resize-none"
                   />
                 </Field>
                 <Field label="model">
-                  <select className="w-full bg-bg border border-line-2 rounded-[7px] px-2 py-2 font-mono text-[0.65rem] text-fg" defaultValue={node.sub.includes("haiku") ? "haiku-4.5 (fast, low cost)" : "sonnet-4.5 (balanced)"}>
-                    <option>haiku-4.5 (fast, low cost)</option>
-                    <option>sonnet-4.5 (balanced)</option>
-                    <option>opus-4.5 (most capable)</option>
-                    <option>gpt-4.1</option>
-                    <option>Automatic routing by complexity</option>
+                  <select
+                    key={node.id}
+                    className="w-full bg-bg border border-line-2 rounded-[7px] px-2 py-2 font-mono text-[0.65rem] text-fg"
+                    defaultValue={MODELS.find((m) => node.sub.startsWith(m)) ?? "auto"}
+                  >
+                    {MODELS.map((m) => (
+                      <option key={m} value={m}>
+                        {MODEL_LABEL[m]}
+                      </option>
+                    ))}
+                    <option value="byo">Another provider (OpenAI, Google, open-weight)</option>
+                    <option value="auto">Automatic routing by complexity</option>
                   </select>
                 </Field>
                 <div className="border border-line rounded-lg p-3 space-y-1.5">
@@ -174,7 +186,7 @@ export default function AgentsTab() {
                 </div>
                 <div>
                   <Label className="mb-1.5">tools</Label>
-                  {["search_docs", "zendesk.reply", "stripe.lookup_charge", "mcp: linear"].map((t, i) => (
+                  {tools.map((t, i) => (
                     <div key={t} className="flex items-center justify-between py-1.5">
                       <span className="font-mono text-[0.62rem]">{t}</span>
                       <Toggle on={i < 2} onChange={() => toast(`${t} access updated · recorded in audit log`)} />
@@ -193,16 +205,12 @@ export default function AgentsTab() {
                 )}
                 <div>
                   <Label className="mb-1.5">versions</Label>
-                  {[
-                    ["v12", "More empathetic tone", "live"],
-                    ["v11", "Restricted to approved content", ""],
-                    ["v10", "Initial version", ""],
-                  ].map(([v, d, s]) => (
+                  {versions.map(([v, d, s]) => (
                     <div key={v} className="flex items-center justify-between py-1.5 border-b border-line last:border-0">
                       <span className="font-mono text-[0.62rem]">
                         <b>{v}</b> <span className="text-dim">{d}</span>
                       </span>
-                      {s ? <Badge tone="neon">live</Badge> : <button onClick={() => toast(`${v} restored as draft v13`)} className="text-[0.7rem] text-dim hover:text-fg cursor-pointer">Restore</button>}
+                      {s ? <Badge tone="neon">live</Badge> : <button onClick={() => toast(`${v} restored as a new draft version`)} className="text-[0.7rem] text-dim hover:text-fg cursor-pointer">Restore</button>}
                     </div>
                   ))}
                 </div>
@@ -211,7 +219,7 @@ export default function AgentsTab() {
             {node.kind === "human" && (
               <>
                 <Field label="approvers">
-                  <Input defaultValue="#support-leads" />
+                  <Input defaultValue={a.human.split(" · ")[0]} />
                 </Field>
                 <Field label="timeout">
                   <select className="w-full bg-bg border border-line-2 rounded-[7px] px-2 py-2 font-mono text-[0.65rem] text-fg">

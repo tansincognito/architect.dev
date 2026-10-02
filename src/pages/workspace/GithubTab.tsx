@@ -1,22 +1,31 @@
 import { useState } from "react";
 import { Check, GitBranch, GitCommitHorizontal, GitPullRequest, Lock, RefreshCw, Search } from "lucide-react";
 import { Badge, Btn, Field, GithubMark, Input, Label, Modal, Pills, Spinner, Toggle, cx } from "../../components/ui";
-import { useShared, useStore } from "../../lib/store";
+import { scenarioFor } from "../../lib/scenarios";
+import { handleOf, useShared, useStore } from "../../lib/store";
 import { useProject } from "./Workspace";
 
-const REPOS = ["acme/support-triage", "acme/billing-dash", "acme/web", "acme/data-pipelines", "acme/infra", "ajay/sandbox"];
+const REPOS = ["acme/support-triage", "acme/billing-dash", "acme/web", "acme/data-pipelines", "acme/infra"];
 
-const COMMITS = [
-  { sha: "c4e19ab", msg: "Enable prompt-injection filter and PII redaction", by: "Architect", human: false, when: "12m ago", src: "governance remediation" },
-  { sha: "a1f9c2e", msg: "Show confidence per ticket category", by: "Architect", human: false, when: "2h ago", src: "requested by Ajay" },
-  { sha: "9d02b7f", msg: "Tighten escalation timeout to 4h", by: "priya-sharma", human: true, when: "5h ago", src: "VS Code · architect sync" },
-  { sha: "77be010", msg: "Approval policy for refunds over $100", by: "Architect", human: false, when: "1d ago", src: "requested by Ajay" },
-];
+interface Commit {
+  sha: string;
+  msg: string;
+  by: string;
+  human: boolean;
+  when: string;
+  src: string;
+}
 
-const PRS = [
-  { n: 42, title: "Governance remediations (10 controls)", branch: "architect/governance-fixes", checks: "passing", reviewers: "priya-sharma" },
-  { n: 41, title: "Add weekly management summary report", branch: "architect/weekly-report", checks: "running", reviewers: "—" },
-];
+interface PR {
+  n: number;
+  title: string;
+  branch: string;
+  checks: string;
+  reviewers: string;
+}
+
+const sha = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(16).padStart(7, "0").slice(0, 7);
+const branchOf = (s: string) => "architect/" + s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").split("-").slice(0, 4).join("-");
 
 interface GhState {
   connected: boolean;
@@ -26,7 +35,11 @@ interface GhState {
 
 export default function GithubTab() {
   const p = useProject();
-  const { toast } = useStore();
+  const { toast, user, updateProject } = useStore();
+  const scenario = scenarioFor(p);
+  const first = user?.name.split(" ")[0] ?? "you";
+  const handle = handleOf(user);
+  const [changes] = useShared<string[]>(`changes.${p.id}`, () => []);
   const [gh, setGh] = useShared<GhState>(`github.${p.id}`, () => ({ connected: !!p.repo, repo: p.repo ?? "", strategy: "pull request per change" }));
   const [step, setStep] = useState<"intro" | "auth" | "repo" | "strategy" | "linking">("intro");
   const [mode, setMode] = useState<"create new" | "link existing">("create new");
@@ -90,7 +103,7 @@ export default function GithubTab() {
                     <select value={org} onChange={(e) => setOrg(e.target.value)} className="w-full bg-bg border border-line-2 rounded-[7px] px-2 py-2 text-[0.85rem] text-fg">
                       <option>acme</option>
                       <option>acme-labs</option>
-                      <option>ajay</option>
+                      <option>{handle}</option>
                     </select>
                   </Field>
                   <Field label="repository name">
@@ -108,7 +121,7 @@ export default function GithubTab() {
                   <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search repositories" className="pl-8" />
                 </div>
                 <div className="border border-line rounded-lg overflow-hidden">
-                  {REPOS.filter((r) => r.includes(q)).map((r) => (
+                  {[...REPOS, `${handle}/sandbox`].filter((r) => r.includes(q)).map((r) => (
                     <button key={r} onClick={() => setPick(r)} className={cx("w-full text-left px-3 py-2.5 border-b border-line last:border-0 flex items-center gap-2 cursor-pointer", pick === r ? "bg-surface" : "hover:bg-surface/60")}>
                       <Lock size={10} className="text-dim" />
                       <span className="font-mono text-[0.75rem] flex-1">{r}</span>
@@ -151,7 +164,9 @@ export default function GithubTab() {
                 onClick={() => {
                   setStep("linking");
                   setTimeout(() => {
-                    setGh({ connected: true, repo: mode === "create new" ? `${org}/${name}` : pick, strategy });
+                    const repo = mode === "create new" ? `${org}/${name}` : pick;
+                    setGh({ connected: true, repo, strategy });
+                    updateProject(p.id, { repo });
                     toast("Repository connected · initial commit pushed");
                   }, 1400);
                 }}
@@ -170,6 +185,29 @@ export default function GithubTab() {
     );
   }
 
+  const perChange = gh.strategy === "pull request per change";
+  const prs: PR[] = p.isNew
+    ? perChange
+      ? changes.map((c, i) => ({ n: changes.length - i, title: c, branch: branchOf(c), checks: i === changes.length - 1 ? "running" : "passing", reviewers: "—" })).reverse()
+      : []
+    : [
+        { n: 42, title: "Governance remediations (10 controls)", branch: "architect/governance-fixes", checks: "passing", reviewers: "priya-sharma" },
+        { n: 41, title: scenario.followUp.ask, branch: branchOf(scenario.followUp.ask), checks: "running", reviewers: "—" },
+      ];
+  const commits: Commit[] = p.isNew
+    ? [
+        ...(perChange ? [] : changes.map((c) => ({ sha: sha(c), msg: c, by: "Architect", human: false, when: "just now", src: `requested by ${first}` })).reverse()),
+        { sha: sha(p.id), msg: `Initial build: ${scenario.label.toLowerCase()}`, by: "Architect", human: false, when: "just now", src: `requested by ${first}` },
+      ]
+    : [
+        { sha: "c4e19ab", msg: "Enable prompt-injection filter and PII redaction", by: "Architect", human: false, when: "12m ago", src: "governance remediation" },
+        { sha: "a1f9c2e", msg: scenario.changelog[0], by: "Architect", human: false, when: "2h ago", src: `requested by ${first}` },
+        { sha: "9d02b7f", msg: "Tighten approval timeout to 4h", by: "priya-sharma", human: true, when: "5h ago", src: "VS Code · architect sync" },
+        { sha: "77be010", msg: scenario.changelog[1], by: "Architect", human: false, when: "1d ago", src: `requested by ${first}` },
+      ];
+  const nextPr = (prs[0]?.n ?? 0) + 1;
+  const prDraft = p.isNew ? (changes[changes.length - 1] ?? "Initial build review") : "Enable prompt-injection filter and PII redaction";
+
   return (
     <div className="flex-1 grid lg:grid-cols-[1fr_320px] min-h-0">
       <section className="px-4 md:px-8 py-6 overflow-auto">
@@ -179,7 +217,7 @@ export default function GithubTab() {
             <div>
               <div className="font-mono text-[0.9rem] font-bold">{gh.repo}</div>
               <div className="text-[0.75rem] text-dim">
-                {syncing ? "Syncing…" : "In sync · last synced 12 minutes ago"} · {gh.strategy}
+                {syncing ? "Syncing…" : `In sync · last synced ${p.isNew ? "just now" : "12 minutes ago"}`} · {gh.strategy}
               </div>
             </div>
           </div>
@@ -201,7 +239,12 @@ export default function GithubTab() {
 
         <Label className="mb-2">open pull requests</Label>
         <div className="border border-line rounded-lg overflow-hidden mb-6">
-          {PRS.map((pr) => (
+          {prs.length === 0 && (
+            <div className="px-4 py-5 text-[0.8rem] text-dim">
+              {perChange ? "No open pull requests. Each change you request in the workspace opens one here." : "Changes are committed according to your strategy; no pull requests are open."}
+            </div>
+          )}
+          {prs.map((pr) => (
             <div key={pr.n} className="flex items-center gap-3 px-4 py-3 border-b border-line last:border-0">
               <GitPullRequest size={13} className="text-live" />
               <div className="flex-1 min-w-0">
@@ -222,7 +265,7 @@ export default function GithubTab() {
 
         <Label className="mb-2">recent commits · main</Label>
         <div className="border border-line rounded-lg overflow-hidden">
-          {COMMITS.map((c) => (
+          {commits.map((c) => (
             <div key={c.sha} className="flex items-center gap-3 px-4 py-3 border-b border-line last:border-0">
               <GitCommitHorizontal size={13} className="text-dim" />
               <div className="flex-1 min-w-0">
@@ -255,7 +298,7 @@ export default function GithubTab() {
         </div>
         <div>
           <Label className="mb-2">branches</Label>
-          {["main", "architect/governance-fixes", "architect/weekly-report"].map((b) => (
+          {["main", ...prs.map((x) => x.branch)].map((b) => (
             <div key={b} className="font-mono text-[0.68rem] py-1.5 flex items-center gap-1.5">
               <GitBranch size={10} className="text-dim" /> {b}
             </div>
@@ -275,16 +318,16 @@ export default function GithubTab() {
       <Modal open={prOpen} onClose={() => setPrOpen(false)} title="Open pull request" width={600}>
         <div className="space-y-3">
           <Field label="title">
-            <Input defaultValue="Enable prompt-injection filter and PII redaction" />
+            <Input defaultValue={prDraft} />
           </Field>
           <Field label="description · generated by Architect">
             <textarea
               rows={8}
               className="w-full bg-bg border border-line-2 rounded-[7px] px-3 py-2 text-[0.8rem] leading-relaxed text-fg outline-none focus:border-fg resize-none"
-              defaultValue={`## Summary\nApplies two governance remediations identified in the readiness review.\n\n## Changes\n- architect.yaml: injection_filter → true\n- architect.yaml: pii_redaction → logs\n\n## Verification\n- 39/39 automated tests passing\n- Quality evaluation: no regressions vs v23 baseline\n\nRequested by: Ajay · Restore point #4`}
+              defaultValue={`## Summary\n${prDraft}.\n\n## Verification\n- ${scenario.tests}/${scenario.tests} automated tests passing\n- Quality evaluation: no regressions against the current baseline\n\nRequested by: ${first}`}
             />
           </Field>
-          <div className="text-[0.75rem] text-dim">architect/governance-fixes → main · reviewers: priya-sharma (auto-assigned via CODEOWNERS)</div>
+          <div className="text-[0.75rem] text-dim">{branchOf(prDraft)} → main · reviewers: priya-sharma (auto-assigned via CODEOWNERS)</div>
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <Btn variant="ghost" onClick={() => setPrOpen(false)}>
@@ -294,7 +337,7 @@ export default function GithubTab() {
             variant="primary"
             onClick={() => {
               setPrOpen(false);
-              toast("Pull request #43 opened · reviewers notified");
+              toast(`Pull request #${nextPr} opened · reviewers notified`);
             }}
           >
             Create pull request

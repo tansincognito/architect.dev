@@ -195,7 +195,6 @@ export function Billing() {
 /* ---------------- team ---------------- */
 
 const MEMBERS = [
-  { n: "Ajay", e: "ajay@acme.com", r: "Owner", t: "Customer Operations", last: "now", view: "Business" },
   { n: "Priya Sharma", e: "priya@acme.com", r: "Admin", t: "Platform Engineering", last: "2h ago", view: "Developer" },
   { n: "Marcus Lee", e: "marcus@acme.com", r: "Viewer", t: "Finance", last: "1d ago", view: "Business" },
   { n: "Elena García", e: "elena@acme.com", r: "Approver", t: "Support Leadership", last: "3h ago", view: "Business" },
@@ -203,7 +202,11 @@ const MEMBERS = [
 ];
 
 export function Team() {
-  const { toast } = useStore();
+  const { toast, user, mode } = useStore();
+  const members = [
+    { n: user?.name ?? "You", e: user?.email ?? "", r: "Owner", t: "Customer Operations", last: "now", view: mode === "dev" ? "Developer" : "Business" },
+    ...MEMBERS,
+  ];
   const [invite, setInvite] = useState(false);
   const [pending, setPending] = useState(["sam@acme.com · Editor"]);
   const [email, setEmail] = useState("");
@@ -221,7 +224,7 @@ export function Team() {
         Members & roles
       </H1>
       <div className="border border-line rounded-lg overflow-hidden mb-6">
-        {MEMBERS.map((m) => (
+        {members.map((m) => (
           <div key={m.e} className="grid grid-cols-[2rem_1fr_10rem_6rem_6rem_7rem] gap-3 items-center px-4 py-3 border-b border-line last:border-0">
             <span className="w-7 h-7 rounded-full bg-surface-2 flex items-center justify-center text-[0.72rem] font-semibold">{m.n[0]}</span>
             <div>

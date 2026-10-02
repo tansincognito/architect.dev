@@ -41,7 +41,7 @@ export const defaultConfidence = (): ConfidenceConfig => ({
   autoAt: 90,
   reviewAt: 60,
   samples: 3,
-  judgeModel: "opus-4.5",
+  judgeModel: "opus-5.5",
   rules: [
     { when: "Customer tier is Enterprise", adjust: -10, on: true },
     { when: "Amount exceeds $1,000", adjust: -20, on: true },
@@ -168,7 +168,7 @@ export function ConfidencePanel({ projectId }: { projectId: string }) {
                   <div className="mt-2 flex items-center gap-2 text-[0.72rem] text-muted">
                     Reviewer model
                     <select value={c.judgeModel} onChange={(e) => set({ judgeModel: e.target.value })} className="bg-bg border border-line-2 rounded px-1.5 py-0.5 font-mono text-[0.68rem] text-fg">
-                      <option>opus-4.5</option>
+                      <option>opus-5.5</option>
                       <option>gpt-4.1</option>
                       <option>gemini-2.5-pro</option>
                     </select>
