@@ -7,3 +7,6 @@ server/data/
 
 # Long-form service catalogue kept locally; docs/SERVICES-SUMMARY.md is the published version
 docs/SERVICES.md
+
+# Architecture and decision records kept locally
+docs/ARCHITECTURE.md
