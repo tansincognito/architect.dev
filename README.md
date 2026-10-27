@@ -2,11 +2,11 @@
 
 Architect 2.0 — a UI/UX prototype of an agent-builder platform for business executives and engineering teams.
 
-Everything is simulated except **authentication**, which is real: email + password accounts (scrypt-hashed), httpOnly session cookies and a local SQLite database.
+Everything is simulated except **authentication**, which is real: email + password accounts (scrypt-hashed), httpOnly session cookies and a Neon Postgres database.
 
 ## Run
 
-Requires Node.js 22.18 or later (uses built-in `node:sqlite` and TypeScript type stripping).
+Requires Node.js 22.18 or later (uses TypeScript type stripping) and a Postgres `DATABASE_URL`, for example a free Neon database. With the Vercel project linked, `vercel env pull .env.local` fetches it.
 
 ```bash
 npm install
@@ -16,7 +16,7 @@ npm run dev
 - App: http://localhost:5180
 - API: http://localhost:8787 (proxied under `/api`)
 
-The database is created at `server/data/architect.db` on first run. Delete that folder to reset all accounts.
+Tables are created on first request. In production the API runs as a Vercel Function (`api/index.ts`).
 
 ## Auth API
 

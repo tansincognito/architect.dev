@@ -1,33 +1,9 @@
-import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { neon } from "@neondatabase/serverless";
 
-const DB_PATH = process.env.ARCHITECT_DB ?? join(dirname(fileURLToPath(import.meta.url)), "data", "architect.db");
-mkdirSync(dirname(DB_PATH), { recursive: true });
+const url = process.env.DATABASE_URL;
+if (!url) throw new Error("DATABASE_URL is not set. Run `vercel env pull .env.local` or export it.");
 
-export const db = new DatabaseSync(DB_PATH);
-
-db.exec(`
-  PRAGMA journal_mode = WAL;
-  PRAGMA foreign_keys = ON;
-
-  CREATE TABLE IF NOT EXISTS users (
-    id          TEXT PRIMARY KEY,
-    email       TEXT NOT NULL UNIQUE,
-    name        TEXT NOT NULL,
-    workspace   TEXT NOT NULL,
-    pw_hash     TEXT NOT NULL,
-    pw_salt     TEXT NOT NULL,
-    created_at  INTEGER NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS sessions (
-    token_hash  TEXT PRIMARY KEY,
-    user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    expires_at  INTEGER NOT NULL
-  );
-`);
+export const sql = neon(url);
 
 export interface UserRow {
   id: string;
@@ -37,4 +13,32 @@ export interface UserRow {
   pw_hash: string;
   pw_salt: string;
   created_at: number;
+}
+
+let ready: Promise<unknown> | undefined;
+
+/** Creates tables once per process; later calls reuse the same promise. */
+export function ensureSchema() {
+  ready ??= sql.transaction([
+    sql`CREATE TABLE IF NOT EXISTS users (
+      id          TEXT PRIMARY KEY,
+      email       TEXT NOT NULL UNIQUE,
+      name        TEXT NOT NULL,
+      workspace   TEXT NOT NULL,
+      pw_hash     TEXT NOT NULL,
+      pw_salt     TEXT NOT NULL,
+      created_at  BIGINT NOT NULL
+    )`,
+    sql`CREATE TABLE IF NOT EXISTS sessions (
+      token_hash  TEXT PRIMARY KEY,
+      user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at  BIGINT NOT NULL
+    )`,
+    sql`CREATE TABLE IF NOT EXISTS login_failures (
+      email       TEXT PRIMARY KEY,
+      count       INTEGER NOT NULL,
+      until       BIGINT NOT NULL
+    )`,
+  ]);
+  return ready;
 }

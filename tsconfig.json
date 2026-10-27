@@ -22,6 +22,7 @@
     "allowImportingTsExtensions": true
   },
   "include": [
+    "api",
     "src",
     "server"
   ]
